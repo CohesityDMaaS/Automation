@@ -54,7 +54,7 @@ if(!$sitesNode){
 }
 
 $nameIndex = @{}
-$smtpIndex = @{}
+#$smtpIndex = @{}
 
 $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.protectionSource.id)&id=$($sitesNode.protectionSource.id)&hasValidSites=true&allUnderHierarchy=false"
 
