@@ -25,11 +25,7 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./protectDmaasEC2VMs.ps1 -region us-east-2 `
-                         -policyName Gold `
-                         -sourceName 23423423423 `
-                         -vmNames myvm1, myvm2 `
-                         -vmList ./vmlist.txt
+./protectDmaasEC2VMs.ps1 -region us-east-2 -policyName Gold -sourceName 23423423423 -vmNames myvm1, myvm2 -vmList ./vmlist.txt
 ```
 
 ## Parameters
