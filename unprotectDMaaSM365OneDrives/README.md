@@ -17,13 +17,13 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 
 ## Components
 
-* UnprotectDMaaSM365OneDrives.ps1: the main powershell script
+* unprotectDMaaSM365OneDrives.ps1: the main powershell script
 * cohesity-api.ps1: the Cohesity REST API helper module
 
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./UnprotectDMaaSM365OneDrives.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -users user1, user2 -userList ./userlist.txt
+./unprotectDMaaSM365OneDrives.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -users user1, user2 -userList ./userlist.txt
 ```
 
 ## Parameters

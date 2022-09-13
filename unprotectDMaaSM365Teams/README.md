@@ -17,13 +17,13 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 
 ## Components
 
-* UnprotectDMaaSM365Teams.ps1: the main powershell script
+* unprotectDMaaSM365Teams.ps1: the main powershell script
 * cohesity-api.ps1: the Cohesity REST API helper module
 
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./UnprotectDMaaSM365Teams.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -teams team1, team2 -teamsList ./teamslist.txt
+./unprotectDMaaSM365Teams.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -teams team1, team2 -teamsList ./teamslist.txt
 ```
 
 ## Parameters
