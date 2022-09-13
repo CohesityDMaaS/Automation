@@ -31,8 +31,8 @@ Place both files in a folder together and run the main script like so:
 * -username: (optional) used for password storage only (default is 'DMaaS')
 * -region: DMaaS region to use
 * -sourceName: name of registered M365 protection source
-* -teams: (optional) one or more teams names or SMTP addresses (comma separated)
-* -teamsList: (optional) text file of teams names or SMTP addresses (one per line)
+* -sites: (optional) one or more Sharepoint Site names (comma separated)
+* -siteList: (optional) text file of Sharepoint Site names (one per line)
 * -pageSize: (optional) limit number of objects returned per page (default is 50000)
 
 ## Authenticating to DMaaS

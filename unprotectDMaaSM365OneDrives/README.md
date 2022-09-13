@@ -32,7 +32,7 @@ Place both files in a folder together and run the main script like so:
 * -region: DMaaS region to use
 * -sourceName: name of registered M365 protection source
 * -users: (optional) one or more OneDrive User names or SMTP addresses (comma separated)
-* -teamsList: (optional) text file of OneDrive User names or SMTP addresses (one per line)
+* -userList: (optional) text file of OneDrive User names or SMTP addresses (one per line)
 * -pageSize: (optional) limit number of objects returned per page (default is 50000)
 
 ## Authenticating to DMaaS
