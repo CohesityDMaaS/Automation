@@ -1,14 +1,14 @@
-# Unprotect DMaaS M365 Teams using PowerShell
+# Unprotect DMaaS M365 OneDrives using PowerShell
 Warning: this code is provided on a best effort basis and is not in any way officially supported or sanctioned by Cohesity. The code is intentionally kept simple to retain value as example code. The code in this repository is provided as-is and the author accepts no liability for damages resulting from its use.
 
-This powershell script removes protection for DMaaS M365 Teams. This script was created for the purpose of automating the offboarding of M365 Teams. 
+This powershell script removes protection for DMaaS M365 OneDrives. This script was created for the purpose of automating the offboarding of M365 OneDrives. 
 
 Download the script
 Run these commands from PowerShell to download the script(s) into your current directory
 
 ```powershell
 # Download Commands
-$scriptName = 'unprotectDMaaSM365Teams'
+$scriptName = 'unprotectDMaaSM365OneDrives'
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/cohesity-api.ps1").content | Out-File cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
@@ -17,13 +17,13 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 
 ## Components
 
-* UnprotectDMaaSM365Teams.ps1: the main powershell script
+* UnprotectDMaaSM365OneDrives.ps1: the main powershell script
 * cohesity-api.ps1: the Cohesity REST API helper module
 
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./UnprotectDMaaSM365Teams.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -teams team1, team2 -teamsList ./teamslist.txt
+./UnprotectDMaaSM365OneDrives.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -users user1, user2 -userList ./userlist.txt
 ```
 
 ## Parameters
@@ -31,8 +31,8 @@ Place both files in a folder together and run the main script like so:
 * -username: (optional) used for password storage only (default is 'DMaaS')
 * -region: DMaaS region to use
 * -sourceName: name of registered M365 protection source
-* -teams: (optional) one or more teams names or SMTP addresses (comma separated)
-* -teamsList: (optional) text file of teams names or SMTP addresses (one per line)
+* -users: (optional) one or more OneDrive User names or SMTP addresses (comma separated)
+* -teamsList: (optional) text file of OneDrive User names or SMTP addresses (one per line)
 * -pageSize: (optional) limit number of objects returned per page (default is 50000)
 
 ## Authenticating to DMaaS
