@@ -13,7 +13,7 @@ Run these commands from PowerShell to download the script(s) into your current d
 $scriptName = 'registerDMaaSphysicalSources'
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
-#(Invoke-WebRequest -Uri "$repoUrl/$scriptName/$cohesity-api.ps1").content | Out-File "$cohesity-api.ps1"; (Get-Content "$cohesity-api.ps1") | Set-Content "$cohesity-api.ps1"
+## (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$cohesity-api.ps1").content | Out-File "$cohesity-api.ps1"; (Get-Content "$cohesity-api.ps1") | Set-Content "$cohesity-api.ps1"
 # End Download Commands
 ```
 
