@@ -21,9 +21,10 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 
 Place both files in a folder together and run the main script like so:
 
-~~~
+```powershell
 ./RegisterDMaaSGenericNasSources.ps1 -regionId us-east-2 -apiKey apikeyvalue -saasConn saasConnectorName -gNasUserName SMBUserName
-~~~
+```
+
 # Parameters
 - username: (optional) used for password storage only (default is 'DMaaS')
 - regionId: DMaaS region to use
