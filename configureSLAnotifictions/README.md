@@ -11,7 +11,7 @@ Run these commands from PowerShell to download the script(s) into your current d
 ```powershell
 # Download Commands
 $scriptName = 'configureSLAnotifications'
-$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
+$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
 # End Download Commands
 ```
