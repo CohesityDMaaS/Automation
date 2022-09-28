@@ -14,8 +14,6 @@ param (
     [Parameter()][bool]$protectedObjectSlaViolated,  # true ProtectedObjectSlaViolated violation set
     [Parameter()][bool]$protectionGroupSlaViolated  # true ProtectionGroupSlaViolated violation set
     
-
-
 )
 
 # outfile
@@ -80,53 +78,39 @@ $clusterId = $sourceId.split(':')
 
 write-host "Cluster Id: $clusterId"
 
+
+
 # register Physical Server
 $headers.Add("regionId", "$regionId")
 
+if($violations -eq 'All'){
+    $alertNames = @(
+    "ObjectBackupSlaViolated",
+    "ProtectedObjectSlaViolated",
+    "ProtectionGroupSlaViolated"
+    )
+}
 
-    # $body = "{
-    #     `"accountId`": `"$accountId`",
-    #     `"alertNames`": [
-    #         `"ObjectBackupSlaViolated`",
-    #         `"ProtectedObjectSlaViolated`",
-    #         `"ProtectionGroupSlaViolated`"
-    #     ],
-    #     `"categories`": null,
-    #     `"clusterIds`": [
-    #         $clusterId
-    #     ],
-    #     `"email_configs`": [
-    #         {
-    #             `"cc`": null,
-    #             `"options`": null,
-    #             `"to`": [
-    #                 `"$emailAddresses`"
-    #             ]
-    #         }
-    #     ],
-    #     `"groupLabelNames`": null,
-    #     `"labels`": null,
-    #     `"pagerduty_configs`": null,
-    #     `"ruleId`": `"62b2af693e30beabecca2f3d`",
-    #     `"ruleName`": `"SLA Notifications`",
-    #     `"severities`": [
-    #         `"Critical`"
-    #     ],
-    #     `"slack_configs`": null,
-    #     `"tenantId`": `"$tenantId`",
-    #     `"typebuckets`": [
-    #         `"DataService`"
-    #     ],
-    #     `"webhook_configs`": null
-    # }"
-    
+elseif($objectBackupSlaViolated -eq $true){
+    $alertNames = "ObjectBackupSlaViolated"
+    }
+
+elseif($protectedObjectSlaViolated -eq $true){
+    $alertNames = "ProtectedObjectSlaViolated"
+    }
+
+elseif($protectionGroupSlaViolated -eq $true){
+    $alertNames = "ProtectionGroupSlaViolated"
+    }
+
+foreach($alertName in $alertNames){
+    $rule = $ruleName + "_" + $alertName
+
     $body = @{
         "accountId" = $accountId;
         "alertNames" = @(
-            # "ObjectBackupSlaViolated";
-            # "ProtectedObjectSlaViolated";
-            # "ProtectionGroupSlaViolated"
-        );
+            $alertName
+            );
         "categories" = $null;
         "clusterIds" = @(
             $clusterId
@@ -144,7 +128,7 @@ $headers.Add("regionId", "$regionId")
         "labels" = $null;
         "pagerduty_configs" = $null;
         "ruleId" = "62b2af693e30beabecca2f3d";
-        "ruleName" = "$ruleName";
+        "ruleName" = $rule;
         "severities" = @();
         "slack_configs" = $null;
         "tenantId" = "$updatedTenantId";
@@ -154,54 +138,9 @@ $headers.Add("regionId", "$regionId")
         "webhook_configs"= $null
     }
 
-    # $validate = @{
-    #     "accountId" = $updatedAccountId;
-    #     "tenantId" = "$updatedTenantId";
-    # }
-
-    if($violations -eq 'All'){
-        $body.alertNames = @(
-            "ObjectBackupSlaViolated";
-            "ProtectedObjectSlaViolated";
-            "ProtectionGroupSlaViolated"
-            )   
-        write-host "ALL" 
-    }
-        
-        # $body = @($body + @{
-        #     "alertNames" = @(
-        #         "ObjectBackupSlaViolated";
-        #         "ProtectedObjectSlaViolated";
-        #         "ProtectionGroupSlaViolated"
-        #         )
-        #     }
-        # )
-        
-
-    if($objectBackupSlaViolated -eq $true){
-        $body.alertNames = @($body.alertNames + @(
-                "ObjectBackupSlaViolated"
-                )
-            )
-        }
-
-    if($protectedObjectSlaViolated -eq $true){
-        $body.alertNames = @($body.alertNames + @(
-                "ProtectedObjectSlaViolated"
-                )
-            )
-        }
-
-    if($protectionGroupSlaViolated -eq $true){
-        $body.alertNames = @($body.alertNames + @(
-                "ProtectionGroupSlaViolated"
-                )
-            )
-        }
-
     if($sourceInfo){
 
-        Write-Host "Configuring SLA Notifications for Cluster ID $clusterId..."
+        Write-Host "`nConfiguring SLA Notifications for Cluster ID $clusterId..."
 
         $bodyJson = $body | ConvertTo-Json 
         write-host "$bodyJson"   
@@ -220,11 +159,11 @@ $headers.Add("regionId", "$regionId")
 
         # $validation = Invoke-RestMethod 'https://helios.cohesity.com/v2/mcm/alert-service/alerts/config/notificationRules' -Method 'GET' -Headers $headers -Body $validate -ContentType 'application/json' 
         # write-host $validation
-       
+    
         Write-host "$response"
     }
 
     else{
-    Write-Host "Set SLA Notifications for Cluster ID $clusterId" -ForegroundColor Yellow
+    Write-Host "Set SLA Notifications for Cluster ID $clusterId not set!" -ForegroundColor Yellow
     }
-
+}
