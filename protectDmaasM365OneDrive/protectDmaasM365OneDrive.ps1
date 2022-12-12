@@ -58,19 +58,6 @@ if(!$policy){
     exit
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 # find O365 source
 $rootSource = api get protectionSources/rootNodes?environments=kO365 | Where-Object {$_.protectionSource.name -eq $sourceName}
 if(!$rootSource){
@@ -104,7 +91,7 @@ while(1){
     if(!($users[0].PSObject.Properties['nodes']) -or $users[0].nodes.Count -eq 1){
         break
     }
-}  
+}
 
 # configure protection parameters
 $protectionParams = @{
@@ -169,4 +156,3 @@ foreach($driveUser in $usersToAdd){
         Write-Host "OneDrive for $driveUser not found" -ForegroundColor Yellow
     }
 }
-
