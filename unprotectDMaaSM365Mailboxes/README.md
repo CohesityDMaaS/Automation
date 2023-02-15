@@ -1,15 +1,14 @@
-# Refresh DMaaS Sources
-
+# Unprotect DMaaS M365 Mailboxes using PowerShell
 Warning: this code is provided on a best effort basis and is not in any way officially supported or sanctioned by Cohesity. The code is intentionally kept simple to retain value as example code. The code in this repository is provided as-is and the author accepts no liability for damages resulting from its use.
 
-This powershell script Refreshes DMaaS Sources.
+This powershell script removes protection for DMaaS M365 Mailboxes. This script was created for the purpose of automating the offboarding of M365 Mailboxes. 
 
-## Download the script
-
+Download the script
 Run these commands from PowerShell to download the script(s) into your current directory
+
 ```powershell
 # Download Commands
-$scriptName = 'DMaaS_Source_Refresh'
+$scriptName = 'unprotectDMaaSM365Mailboxes'
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/cohesity-api.ps1").content | Out-File cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
@@ -17,27 +16,24 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 ```
 
 ## Components
-* Ensure that the below two components are saved in the same directory:
 
-* DMaaS_Source_Refresh.ps1: the main powershell script
+* unprotectDMaaSM365Mailboxes.ps1: the main powershell script
 * cohesity-api.ps1: the Cohesity REST API helper module
 
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./DMaaS_Source_Refresh.ps1 -region us-east-2 -sourceID 772,3306
+./unprotectDMaaSM365Mailboxes.ps1 -region us-east-2 -sourceName mydomain.onmicrosoft.com -mailboxes mailbox1, mailbox2 -mailboxList ./userlist.txt
 ```
 
 ## Parameters
 
-* region: DMaaS region to use
-* username: (optional) used for password storage only (default is 'DMaaS')
-* sourceID: ID of registered M365 protection source
-
-The ID of a Cohesity DMaaS Source can be found in the navigation bar of the internet browser after having clicked on the Source Name:
-https://helios.cohesity.com/protections/sources/details/187694/objects?regionId=us-west-1&environment=kVMware
-
-In the above address, the Source ID is: 187694
+* -username: (optional) used for password storage only (default is 'DMaaS')
+* -region: DMaaS region to use
+* -sourceName: name of registered M365 protection source
+* -mailboxes: (optional) one or more OneDrive User names or SMTP addresses (comma separated)
+* -mailboxList: (optional) text file of OneDrive User names or SMTP addresses (one per line)
+* -pageSize: (optional) limit number of objects returned per page (default is 50000)
 
 ## Authenticating to DMaaS
 

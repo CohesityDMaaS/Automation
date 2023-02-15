@@ -1,15 +1,16 @@
-# Refresh DMaaS Sources
+# Protect DMaaS M365 Sharepoint Sites using PowerShell
 
 Warning: this code is provided on a best effort basis and is not in any way officially supported or sanctioned by Cohesity. The code is intentionally kept simple to retain value as example code. The code in this repository is provided as-is and the author accepts no liability for damages resulting from its use.
 
-This powershell script Refreshes DMaaS Sources.
+This powershell script protects DMaaS M365 Sharepoint Sites.
 
 ## Download the script
 
 Run these commands from PowerShell to download the script(s) into your current directory
+
 ```powershell
 # Download Commands
-$scriptName = 'DMaaS_Source_Refresh'
+$scriptName = 'protectDMaaSM365Sites'
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/cohesity-api.ps1").content | Out-File cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
@@ -17,27 +18,29 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 ```
 
 ## Components
-* Ensure that the below two components are saved in the same directory:
 
-* DMaaS_Source_Refresh.ps1: the main powershell script
+* protectDMaaSM365Sites.ps1: the main powershell script
 * cohesity-api.ps1: the Cohesity REST API helper module
 
 Place both files in a folder together and run the main script like so:
 
 ```powershell
-./DMaaS_Source_Refresh.ps1 -region us-east-2 -sourceID 772,3306
+./protectDMaaSM365Sites.ps1 -region us-east-2 -policyName Gold -sourceName mydomain.onmicrosoft.com -sites site1, site -siteList ./sitelist.txt
 ```
 
 ## Parameters
 
-* region: DMaaS region to use
-* username: (optional) used for password storage only (default is 'DMaaS')
-* sourceID: ID of registered M365 protection source
-
-The ID of a Cohesity DMaaS Source can be found in the navigation bar of the internet browser after having clicked on the Source Name:
-https://helios.cohesity.com/protections/sources/details/187694/objects?regionId=us-west-1&environment=kVMware
-
-In the above address, the Source ID is: 187694
+* -username: (optional) used for password storage only (default is 'DMaaS')
+* -region: DMaaS region to use
+* -sourceName: name of registered M365 protection source
+* -policyName: name of protection policy to use
+* -sites: (optional) one or more Sharepoint Site names (comma separated)
+* -siteList: (optional) text file of Sharepoint Site names (one per line)
+* -startTime: (optional) e.g. '18:30' (defaults to 8PM)
+* -timeZone: (optional) e.g. 'America/New_York' (default is 'America/New_York')
+* -incrementalSlaMinutes: (optional) default 60
+* -fullSlaMinutes: (optional) default is 120
+* -pageSize: (optional) limit number of objects returned pr page (default is 50000)
 
 ## Authenticating to DMaaS
 

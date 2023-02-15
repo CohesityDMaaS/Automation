@@ -1,8 +1,8 @@
-# Register DMaaS SQL using PowerShell
+# Pull DMaaS Audit Logs using PowerShell
 
 Warning: this code is provided on a best effort basis and is not in any way officially supported or sanctioned by Cohesity. The code is intentionally kept simple to retain value as example code. The code in this repository is provided as-is and the author accepts no liability for damages resulting from its use.
 
-This powershell script registers DMaaS SQL Sources.
+This powershell script pulls DMaaS Audit Logs and saves them in JSON format. This script also has a functionality which allows the customer to push their DMaaS Audit Logs to a webhook for third party analysis (ie: SumoLogic, ServiceNow, etc.).
 
 ## Download the script
 
@@ -10,29 +10,33 @@ Run these commands from PowerShell to download the script(s) into your current d
 
 ```powershell
 # Download Commands
-$scriptName = 'registerDMaasSQLsources'
+$scriptName = 'pullDMaaSAuditLogs'
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
+(Invoke-WebRequest -Uri "$repoUrl/$scriptName/README.md").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "README.md"
 # End Download Commands
 ```
 
 ## Components
 
-* registerDMaasSQLsources.ps1: the main powershell script
+* pullDMaaSAuditLogs.ps1: the main powershell script
 
 Run the main script like so:
 
 ```powershell
-./registerDMaasSQLsources.ps1 -apiKey API-KEY -regionId us-east-2 -saasConn "Saas_Connection-Name" -sqlList ./sqlList.txt
+./pullDMaaSAuditLogs.ps1 -apiKey XXXXXXX -regionAll
+
+./pullDMaaSAuditLogs.ps1 -apiKey XXXXXXX -regionId us-east-2, us-west-1 - days 3
 ```
 
 ## Parameters
 
 * -apiKey: apiKey generated in DMaaS UI
-* -regionId: DMaaS region to use
-* -saasConn: name of SaaS Connection to associate with SQL Source
-* -sqlFQDN: (optional) one or more SQL FQDNs (comma separated)
-* -sqlList: (optional) text file of SQL FQDNs (one per line)
+* -regionId: (optional) DMaaS region ID(s) (comma separated)
+* -regionAll: (optional) switch to indicate that ALL DMaaS Regions will be pulled for Audit Report (recommended)
+    * it is mandatory that you use one of either regionId or regionAll
+* -days: (optional) how many days of logs to pull (default = 1)
+* -uri: (optional) website accepting webhook data (ex: "https://webhook.site/a2633791-5ad1-473e-aad4-4dbda106676d")
 
 
 ## Authenticating to DMaaS

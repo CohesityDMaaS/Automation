@@ -1,8 +1,8 @@
-# Register DMaaS SQL using PowerShell
+# Configure DMaaS SLA Notifications using Powershell
 
 Warning: this code is provided on a best effort basis and is not in any way officially supported or sanctioned by Cohesity. The code is intentionally kept simple to retain value as example code. The code in this repository is provided as-is and the author accepts no liability for damages resulting from its use.
 
-This powershell script registers DMaaS SQL Sources.
+This powershell script configures DMaaS SLA Notifications.
 
 ## Download the script
 
@@ -10,30 +10,30 @@ Run these commands from PowerShell to download the script(s) into your current d
 
 ```powershell
 # Download Commands
-$scriptName = 'registerDMaasSQLsources'
-$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
+$scriptName = 'configureSLAnotifications'
+$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/'
 (Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
 # End Download Commands
 ```
 
 ## Components
 
-* registerDMaasSQLsources.ps1: the main powershell script
+* configureSLAnotifications.ps1: the main powershell script
 
 Run the main script like so:
 
 ```powershell
-./registerDMaasSQLsources.ps1 -apiKey API-KEY -regionId us-east-2 -saasConn "Saas_Connection-Name" -sqlList ./sqlList.txt
+./configureSLAnotifications.ps1 -apiKey ****** -regionId us-east-1 -ruleName "SLA_Alerts" -emailAddresses "test@duh.com, blah@test.com" -violations All -source server.domain.com
 ```
 
 ## Parameters
 
 * -apiKey: apiKey generated in DMaaS UI
-* -regionId: DMaaS region to use
-* -saasConn: name of SaaS Connection to associate with SQL Source
-* -sqlFQDN: (optional) one or more SQL FQDNs (comma separated)
-* -sqlList: (optional) text file of SQL FQDNs (one per line)
-
+* -regionId: DMaaS SQL Source Region Id
+* -ruleName: SLA Alert Notification Rule Name
+* -source: reference Registered Source to validate DMaaS Cluster
+* -emailAddresses: emails addresses that will be notified to SLA Violations
+* -violations:  All by default
 
 ## Authenticating to DMaaS
 
