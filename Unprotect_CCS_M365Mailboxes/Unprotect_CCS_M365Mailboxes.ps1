@@ -10,6 +10,8 @@ param (
     [Parameter()][int]$pageSize = 50000
 )
 
+$outfileName = ".\log-Unprotect_CCS_M365Mailboxes-$dateString.txt"
+
 # gather list of mailboxes to unprotect
 $mailboxesToAdd = @()
 foreach($mailbox in $mailboxes){
@@ -104,7 +106,7 @@ foreach($mailbox in $mailboxesToAdd){
 
         # unprotect objects
         $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-        #$unprotectResponse | out-file -filepath .\$outfileName -Append
+        $unprotectResponse | out-file -filepath .\$outfileName -Append
         Write-Host "Unprotected $mailbox"
     }
     Else {"Unable to Find $mailbox in order to unprotect prior to assigning new Protection configuration." }

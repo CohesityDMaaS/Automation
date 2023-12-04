@@ -9,7 +9,9 @@ param (
     [Parameter(Mandatory = $False)][bool]$deleteAllSnapshots = $False,  # whether all Snapshots are deleted (default to $False)
     [Parameter()][int]$pageSize = 50000
 )
-$outfileName = "$PSScriptRoot\log-Unprotect_CCS_M365OneDrives-$dateString.txt"
+
+$outfileName = ".\log-Unprotect_CCS_M365OneDrives-$dateString.txt"
+
 # gather list of onedrives to unprotect
 $usersToAdd = @()
 foreach($driveUser in $users){
@@ -104,7 +106,7 @@ foreach($driveUser in $usersToAdd){
 
 		       # unprotect objects
         $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-        #$unprotectResponse | out-file -filepath .\$outfileName -Append
+        $unprotectResponse | out-file -filepath .\$outfileName -Append
         Write-Host "Unprotected $driveUser"
 		}
     Else {"Unable to Find $driveUser in order to unprotect." }

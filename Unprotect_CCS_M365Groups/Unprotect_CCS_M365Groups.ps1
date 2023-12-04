@@ -10,6 +10,8 @@ param (
     [Parameter()][int]$pageSize = 50000
 )
 
+$outfileName = ".\log-Unprotect_CCS_M365Groups-$dateString.txt"
+
 # gather list of MS groups to unprotect
 $groupsToAdd = @()
 foreach($team in $groups){
@@ -100,7 +102,7 @@ foreach($team in $groupsToAdd){
 
 		# unprotect objects
         $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-        #$unprotectResponse | out-file -filepath .\$outfileName -Append
+        $unprotectResponse | out-file -filepath .\$outfileName -Append
         Write-Host "Unprotected $team"
 		}
     Else {"Unable to Find $team in order to unprotect." }

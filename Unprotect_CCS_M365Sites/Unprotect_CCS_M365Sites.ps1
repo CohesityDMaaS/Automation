@@ -10,7 +10,7 @@ param (
     [Parameter()][int]$pageSize = 50000
 )
 
-$outfileName = "$PSScriptRoot\log-Unprotect_CCS_M365Sites-$dateString.txt"
+$outfileName = ".\log-Unprotect_CCS_M365Sites-$dateString.txt"
 
 # gather list of SharePoint sites to unprotect
 $sitesToAdd = @()

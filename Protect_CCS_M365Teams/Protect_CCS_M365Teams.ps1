@@ -14,6 +14,8 @@ param (
     [Parameter()][int]$pageSize = 1000
 )
 
+$outfileName = ".\log-Protect_CCS_M365Teams-$dateString.txt"
+
 # gather list of MS Teams to protect
 $teamsToAdd = @()
 foreach($team in $teams){
@@ -146,6 +148,7 @@ foreach($team in $teamsToAdd){
         })
         Write-Host "Protecting Team for $team"
         $response = api post -v2 data-protect/protected-objects $protectionParams
+	$response | out-file -filepath .\$outfileName -Append
     }else{
         Write-Host "Team for $team not found" -ForegroundColor Yellow
     }

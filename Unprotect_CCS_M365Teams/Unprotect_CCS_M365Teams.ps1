@@ -10,6 +10,8 @@ param (
     [Parameter()][int]$pageSize = 50000
 )
 
+$outfileName = ".\log-Unprotect_CCS_M365Teams-$dateString.txt"
+
 # gather list of MS Teams to unprotect
 $teamsToAdd = @()
 foreach($team in $teams){
@@ -26,8 +28,6 @@ if ('' -ne $teamsList){
         exit
     }
 }
-
-$outfileName = "$PSScriptRoot\log-Unprotect_CCS_M365Teams-$dateString.txt"
 
 $teamsToAdd = @($teamsToAdd | Where-Object {$_ -ne ''})
 
