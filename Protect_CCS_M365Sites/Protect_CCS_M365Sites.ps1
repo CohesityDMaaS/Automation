@@ -5,8 +5,8 @@ param (
     [Parameter(Mandatory = $True)][string]$region,  # CCS region
     [Parameter(Mandatory = $True)][string]$policyName = '',  # protection policy name
     [Parameter(Mandatory = $True)][string]$sourceName,  # name of registered O365 source
-    [Parameter()][array]$sites,  # optional names of SharePoint Sites to protect
-    [Parameter()][string]$siteList,  # optional textfile of SharePoint Sites to protect
+    [Parameter()][array]$sites,  # optional names of sites to protect
+    [Parameter()][string]$siteList,  # optional textfile of Sites to protect
     [Parameter()][string]$startTime = '20:00',  # e.g. 23:30 for 11:30 PM
     [Parameter()][string]$timeZone = 'America/New_York', # e.g. 'America/New_York'
     [Parameter()][int]$incrementalSlaMinutes = 60,  # incremental SLA minutes
