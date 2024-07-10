@@ -26,6 +26,9 @@ Place both files in a folder together and run the main script like so:
 
 ```powershell
 ./Protect_CCS_M365Sites.ps1 -region us-east-2 -policyName Gold -sourceName mydomain.onmicrosoft.com -sites site1, site -siteList ./sitelist.txt
+
+WildCard Example
+./Protect_CCS_M365Sites.ps1 -region us-east-2 -policyName Gold -sourceName mydomain.onmicrosoft.com -sites "Site*" -wildcard $true
 ```
 
 ## Parameters
@@ -41,6 +44,7 @@ Place both files in a folder together and run the main script like so:
 * -incrementalSlaMinutes: (optional) default 60
 * -fullSlaMinutes: (optional) default is 120
 * -pageSize: (optional) limit number of objects returned pr page (default is 50000)
+* -wildcard: (optional) peformsp protection using *
 
 ## Authenticating to CCS
 
