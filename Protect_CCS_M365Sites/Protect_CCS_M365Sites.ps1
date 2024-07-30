@@ -3,10 +3,10 @@
 param (
     [Parameter()][string]$username = 'DMaaS',
     [Parameter(Mandatory = $True)][string]$region,  # DMaaS region
-    [Parameter(Mandatory = $True)][string]$policyName = '',  # protection policy name
+    [Parameter(Mandatory = $True)][string]$policyName,  # protection policy name
     [Parameter(Mandatory = $True)][string]$sourceName,  # name of registered O365 source
-    [Parameter()][array]$sites,  # optional names of mailboxes protect
-    [Parameter()][string]$siteList,  # optional textfile of mailboxes to protect
+    [Parameter()][array]$sites,  # optional names of Sites protect
+    [Parameter()][string]$siteList,  # optional textfile of Sites to protect
     [Parameter()][string]$startTime = '20:00',  # e.g. 23:30 for 11:30 PM
     [Parameter()][string]$timeZone = 'America/New_York', # e.g. 'America/New_York'
     [Parameter()][int]$incrementalSlaMinutes = 60,  # incremental SLA minutes
@@ -16,20 +16,24 @@ param (
 )
 
 # gather list of sites to protect
-if($sites -ne "All"){
+if($sites){
     $sitesToAdd = @()
     foreach($site in $sites){
         $sitesToAdd += $site
     }
-    if ('' -ne $siteList){
+}
+    elseif ('' -ne $siteList){
+        $sitesToAdd = @()
         if(Test-Path -Path $siteList -PathType Leaf){
             $sites = Get-Content $siteList
             foreach($site in $sites){
                 $sitesToAdd += [string]$site
             }
         }else{
+            if($sites.count -eq 0){
             Write-Host "Site list $siteList not found!" -ForegroundColor Yellow
             exit
+        }
         }
     }
 
@@ -39,9 +43,6 @@ if($sites -ne "All"){
     Write-Host "No Sites specified" -ForegroundColor Yellow
     exit
     }
-}
-
-
 
 
 # parse startTime
@@ -58,12 +59,14 @@ if(! (($hour -and $minute) -or ([int]::TryParse($hour,[ref]$tempInt) -and [int]:
 # authenticate
 apiauth -username $username -regionid $region
 
+#Validate the proteciton Policy exists
 $policy = (api get -mcmv2 data-protect/policies?types=DMaaSPolicy).policies | Where-Object name -eq $policyName
 if(!$policy){
     write-host "Policy $policyName not found" -ForegroundColor Yellow
     exit
 }
 
+#Validate the site(s) to protect exist in the Tenant if a Wildcard is not used for protection
 if(($sites -ne "All") -and ($wildcard -ne $True)){
     $rootSource = api get protectionSources/rootNodes?environments=kO365 | Where-Object {$_.protectionSource.name -eq $sourceName}
     if(!$rootSource){
@@ -79,7 +82,6 @@ if(($sites -ne "All") -and ($wildcard -ne $True)){
     }
 
     $nameIndex = @{}
-    $smtpIndex = @{}
 
     $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.protectionSource.id)&id=$($sitesNode.protectionSource.id)&hasValidSites=true&allUnderHierarchy=false"
 
@@ -95,39 +97,97 @@ if(($sites -ne "All") -and ($wildcard -ne $True)){
         }
     }
 }
-elseif($sites -eq "All"){
-    $protectedSources = (api get -v2 data-protect/search/protected-objects).objects | where-object objectType -eq "kSite"
-    if(!$protectedSources){
-        write-host "No Sites found" -ForegroundColor Yellow
+
+
+if($wildcard -ne $True){ 
+        $protectedSources = (api get -v2 data-protect/search/objects).objects | where-object objectType -eq "kSite"
+        $unprotectedSources = (api get -v2 data-protect/search/objects?sourceUuids=$Source.protectionSource.name"&"searchString=*"&"isProtected=false"&"includeTenants=true).objects | where-object objectType -eq "kSite"
+        if(!$unprotectedSources){
+            write-host "No Sites found to be protected" -ForegroundColor Yellow
+            exit
+        }
+        else{
+            $userIds = @()
+            $siteList = @()
+            foreach($site in $sitesToAdd){
+                $matchSites = $unprotectedSources | where-object name -like "$site"
+            if(!$matchSites){
+            write-host("No unprotected Sites matching $site")
+            continue
+            }
+      if($matchSites){
+            $siteId = ($matchSites.objectprotectioninfos | Where-object regionID -eq "$region" | Select-Object objectID).objectid
+            $siteList += $matchSites.name
+            $userIds += $siteId 
+            write-host("Site ID matching " + $site + ": " + $userIds)
+        }
+    }
+  }
+ }
+
+
+elseif($wildcard -eq $True){
+    $rootSource = api get protectionSources/rootNodes?environments=kO365 | Where-Object {$_.protectionSource.name -eq $sourceName}
+    if(!$rootSource){
+        Write-Host "O365 Source $sourceName not found" -ForegroundColor Yellow
         exit
     }
-    else{
-        $siteId = $protectedSources.id 
-        $userIds = $siteId| where-object {$protectedSources.latestSnapshotsInfo -eq 0}
 
+    $source = api get "protectionSources?id=$($rootSource.protectionSource.id)&excludeOffice365Types=kMailbox,kUser,kGroup,kSite,kPublicFolder,kTeam,kO365Exchange,kO365OneDrive,kO365Sharepoint&allUnderHierarchy=false"
+    $sitesNode = $source.nodes | Where-Object {$_.protectionSource.name -eq 'Sites'}
+    if(!$sitesNode){
+        Write-Host "Source $sourceName is not configured for M365 Sites" -ForegroundColor Yellow
+        exit
     }
-}
-elseif($wildcard -eq $True){
+
+    $nameIndex = @{}
+
+    $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.protectionSource.id)&id=$($sitesNode.protectionSource.id)&hasValidSites=true&allUnderHierarchy=false"
+
+    while(1){
+        # implement pagination
+        foreach($node in $users.nodes){
+            $nameIndex[$node.protectionSource.name] = $node.protectionSource.id
+        }
+        $cursor = $users.nodes[-1].protectionSource.id
+        $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.protectionSource.id)&id=$($sitesNode.protectionSource.id)&hasValidSites=true&allUnderHierarchy=false&afterCursorEntityId=$cursor"
+        if(!$users.PSObject.Properties['nodes'] -or $users.nodes.Count -eq 1){
+            break
+        }
+    }
+    
+    
     $userIds = @()
     $protectedSources = (api get -v2 data-protect/search/protected-objects).objects | where-object objectType -eq "kSite"
-    if(!$protectedSources){
-        write-host "No Sites found" -ForegroundColor Yellow
+    $unprotectedSources = (api get -v2 data-protect/search/objects?sourceUuids=$Source.protectionSource.name"&"searchString=*"&"isProtected=false"&"includeTenants=true).objects | where-object objectType -eq "kSite"
+
+    if(!$unprotectedSources){
+        write-host "No Sites found to Protect with WildCard Search" -ForegroundColor Yellow
         exit
     }
     else{
+        $userIds = @()
+        $siteList = @()
         foreach($site in $sitesToAdd){
-            $matchSites = $protectedSources | where-object name -like "$site"
-            $siteIds = $matchSites.id
+            $matchSites = $unprotectedSources | where-object name -like "*$site*"
+            if(!$matchSites){
+            write-host("No unprotected Sites matching $site")
+            continue
+        }
+        if($matchSites){
+            $siteIds = ($matchSites.objectprotectioninfos | Where-object regionID -eq "$region" | Select-Object objectID).objectid
+            $siteList += $matchSites.name
             $userIds += $siteIds 
             write-host("Site ID matching " + $site + ": " + $siteIds)
             
         }
 
-    }
+    
 
-}
+   }
+  }
+ }
 
-write-host("List all Site Ids:" + $userIds)
 
 # configure protection parameters
 $protectionParams = @{
@@ -155,14 +215,11 @@ $protectionParams = @{
 
 $sitesAdded = 0
 
-# find sites
+# Apply site information to protection parameters and protect
 if(($sites -ne "All") -and ($wildcard -ne $True)){
-    foreach($site in $sitesToAdd){
+    foreach($site in $siteList){
         $userId = $null
-        if($smtpIndex.ContainsKey("$site")){
-            $userId = $smtpIndex["$site"]
-        }
-        elseif($nameIndex.ContainsKey("$site")){
+        if($nameIndex.ContainsKey("$site")){
             $userId = $nameIndex["$site"]
         }   
         if($userId){
@@ -226,31 +283,4 @@ else{
         }
     }
 }
-# elseif($wildcard -eq $True){
-#     for($i = $userIds.Count -1; $i -ge 0; $i--){
-#     #foreach($userId in $userIds){
-#         $protectionParams.objects = @(@{
-#             "environment"     = "kO365Sharepoint";
-#             "office365Params" = @{
-#                 "objectProtectionType"              = "kSharePoint";
-#                 "sharepointSiteObjectProtectionParams" = @{
-#                     "objects"        = @(
-#                         @{
-#                             "id" = $i
-#                             "shouldAutoProtectObject" = $false
-#                         }
-#                     );
-#                     "indexingPolicy" = @{
-#                         "enableIndexing" = $true;
-#                         "includePaths"   = @(
-#                             "/"
-#                         );
-#                         "excludePaths"   = @()
-#                     }
-#                 }
-#             }
-#         })
-#         Write-Host "Protecting Site for $i"
-#         $response = api post -v2 data-protect/protected-objects $protectionParams
-#     }
-# }
+
