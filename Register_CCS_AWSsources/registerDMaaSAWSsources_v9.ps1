@@ -237,7 +237,7 @@ else{
 # Get the list of AWS CLI profiles
 $awsProfiles = Invoke-AWSCommand "aws configure list-profiles"
         
-# Process the awsCSV CSV file
+# Process the awsCSV file
 $awsData = Import-Csv $awsCSV 
     foreach ($row in $awsData) {
     $AWSaccount = $row.accountId
@@ -268,7 +268,7 @@ $awsData = Import-Csv $awsCSV
         $bodyJson = ConvertTo-Json -Compress -Depth 99 $body 
 
         # register DMaaS AWS Account - STEP 1
-        $response = api post -mcmv2 "/dms/tenants/regions/aws-cloud-source?tenantId=$tenandId&destinationRegionId=$regionId&awsAccountNumber=$AWSaccount"
+        $response = api post -mcmv2 "/dms/tenants/regions/aws-cloud-source" $bodyJson
         $response | ConvertTo-Json
         # Write-host "$response" -ForegroundColor Green 
         pass_log "Response from STEP 1 DMaaS AWS Accout Registration API: `n$response"
@@ -279,7 +279,6 @@ $awsData = Import-Csv $awsCSV
 
         # edit CFT file to remove api response data
         info_log "STEP 2 - Editing API Output to create CloudFormation Template for AWS Account ID $AWSaccount..." 
-
         $cftJSON = Get-Content -path $awsCFTfile
         
         # removing first line of text from API response
@@ -292,16 +291,21 @@ $awsData = Import-Csv $awsCSV
         $cftJSON_second = $cftJSON[0..($cftJSON.count - 2)]
         $cftJSON = $cftJSON_second
 
-        $awsCFTjson = "$awsCFT\$AWSaccount-$dateString.json"
-        Write-Output "$cftJSON" | Set-Content -path $awsCFTjson  
-        # Write-Output "$cftJSON" | out-file -filepath $awsCFTjson -force 
-        "{" + (Get-Content $awsCFTjson | Out-String) | Set-Content $awsCFTjson
-        $cftJSON = Get-Content -path $awsCFTjson
-        info_log "Step 1 of DMaaS AWS Account Registration completed SUCCESSFULLY!" 
-        info_log "CFT Template Body: $cftJSON"
-        info_log "CFT Template Location: $awsCFTjson"
+        if($cftJSON){
+            $awsCFTjson = "$awsCFT\$AWSaccount-$dateString.json"
+            Write-Output "$cftJSON" | Set-Content -path $awsCFTjson  
+            # Write-Output "$cftJSON" | out-file -filepath $awsCFTjson -force 
+            "{" + (Get-Content $awsCFTjson | Out-String) | Set-Content $awsCFTjson
+            $cftJSON = Get-Content -path $awsCFTjson
+            info_log "Step 1 of DMaaS AWS Account Registration completed SUCCESSFULLY!" 
+            info_log "CFT Template Body: $cftJSON"
+            info_log "CFT Template Location: $awsCFTjson"
         }
-
+        else{
+            fail_log "No CFT created to deploy! `nScript now exiting..."
+            exit
+        }
+    }
     else{
         warn_log "No AWS Account ID available to Register!"
     }
@@ -447,7 +451,7 @@ $awsData = Import-Csv $awsCSV
                 }
 
             else{
-                warn_log "No Default AWS Credentials initialized on this box! If you are experiencing AWS permissions errors, please reference the following section of the Cohesity DMaaS Guide: `nhttps://docs.cohesity.com/baas/data-protect/aws-account-requirements.htm?tocpath=Amazon%20Web%20Services%7C_____1#IAMUserPermissionstoExecuteCFT" 
+                warn_log "No Default AWS Credentials initialized on this box! If you are experiencing AWS permissions errors, please reference the following section of the Cohesity Cloud Solutions Guide: `nhttps://docs.cohesity.com/baas/data-protect/aws-account-requirements.htm?tocpath=Amazon%20Web%20Services%7C_____1#IAMUserPermissionstoExecuteCFT" 
             }
         }
         else{
@@ -518,17 +522,17 @@ $awsData = Import-Csv $awsCSV
         info_log "STEP 6 -Finalizing Registration of AWS Account ID $AWSaccount in DMaaS..." 
 
         # prepare body of REST API Call
-        # $bodyJson = $finalBody | ConvertTo-Json 
-        info_log "Final AWS Registration API Payload: $finalBody"   
-        # $bodyJson = ConvertTo-Json -Compress -Depth 99 $finalBody 
+        $bodyJson = $finalBody | ConvertTo-Json 
+        info_log "Final AWS Registration API Payload: $bodyJson"   
+        $bodyJson = ConvertTo-Json -Compress -Depth 99 $bodyJson 
 
-        $final = api post -mcmv2 "data-protect/sources/registrations" $finalBody 
+        $final = api post -mcmv2 "data-protect/sources/registrations" $bodyJson 
         $final | ConvertTo-Json
-        pass_log "Response from Final AWS Registration API: $final" 
+        pass_log "Response from Final AWS Registration API: $bodyJson" 
                 
-        if($final){
-            pass_log "Registration of $AWSaccount SUCCESSFUL!" -ForegroundColor Green
-            pass_log "$final"
+        if($bodyJson){
+            pass_log "Registration of $AWSaccount SUCCESSFUL!"
+            pass_log "$bodyJson"
         }
         else{
             fail_log "Registration of $AWSaccount UNSUCCESSFUL!"
