@@ -228,6 +228,12 @@ else{
 #     exit
 # }
 
+# clear AWS Credential Stores
+$awsCredStores = Get-AWSCredentials -ListStoredCredentials
+foreach($awsCredStore in $awsCredStores) {
+    Remove-AWSCredentialProfile -ProfileName $awsCredStore
+}
+
 # Get the list of AWS CLI profiles
 $awsProfiles = Invoke-AWSCommand "aws configure list-profiles"
         
@@ -315,7 +321,6 @@ $awsData = Import-Csv $awsCSV
         
     # Find the profile that matches the account ID
     foreach ($profile in $awsProfiles) {
-        Remove-AWSCredentialProfile -ProfileName $profile
         if ($profile -like "*$AWSaccount*") {
             $awsProfile = $profile
             break
@@ -327,9 +332,9 @@ $awsData = Import-Csv $awsCSV
     }
 
     # Set AWS CLI to use the profile and region
-    Remove-AWSCredentialProfile -ProfileName $awsProfile
     $env:AWS_PROFILE = $awsProfile
     $env:AWS_DEFAULT_REGION = $region
+    Get-AWSCredential -ListProfileDetail
     Initialize-AWSDefaultConfiguration -ProfileName MyMainUserProfile -Region $region
     Set-AWSCredentials -ProfileName $awsProfile
 
