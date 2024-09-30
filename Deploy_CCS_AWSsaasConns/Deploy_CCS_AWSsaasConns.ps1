@@ -165,7 +165,7 @@ if($groupId){
     # $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&regionId=$CCSregionId&groupId=$groupId&getConnectionStatus=true" -Method 'GET' -headers $headers
     # $saasConnNum = $saasConn.rigelGroups.expectedNumberOfRigels
     # UPDATE
-    $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&maxRecordLimit=1000&fetchConnectorGroups=true" -Method 'GET' -headers $headers
+    $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&groupId=$groupId&fetchToken=true" -Method 'GET' -headers $headers
     $saasConnNum = $saasConn.rigelGroups.expectedNumberOfRigels
 
     Write-host "`nNumber of CCS AWS SaaS Connectors already implemented: $saasConnNum`n" 
