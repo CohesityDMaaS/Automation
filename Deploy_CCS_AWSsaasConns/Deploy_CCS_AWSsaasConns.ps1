@@ -146,7 +146,7 @@ write-output "`n$dateTime    INFO    Pulling AWS Source Info...`n" | Out-File -F
 $awsSources = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/data-protect/sources?environments=kAWS" -Method 'GET' -Headers $headers
 $awsSource = $awsSources.sources | where-object {$_.name -eq "$AWSid"}
 $awsSourceId = $awsSource.sourceInfoList.sourceId
-$regId = $awsSourceId = $awsSource.sourceInfoList.registrationId
+$regId = $awsSource.sourceInfoList.registrationId
 
 Write-host "`nCCS AWS Registration ID: $regId`n" 
 write-output "`n$dateTime    INFO    CCS AWS Registration ID: $regId`n" | Out-File -FilePath $outfileName -Append 
@@ -162,7 +162,10 @@ Write-host "`nCCS AWS SaaS Connection Group ID: $groupId`n"
 write-output "`n$dateTime    INFO    CCS AWS SaaS Connection Group ID: $groupId`n" | Out-File -FilePath $outfileName -Append 
 
 if($groupId){
-    $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&regionId=$CCSregionId&groupId=$groupId&getConnectionStatus=true" -Method 'GET' -headers $headers
+    # $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&regionId=$CCSregionId&groupId=$groupId&getConnectionStatus=true" -Method 'GET' -headers $headers
+    # $saasConnNum = $saasConn.rigelGroups.expectedNumberOfRigels
+    # UPDATE
+    $saasConn = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups?tenantId=$tenandId&groupId=$groupId&fetchToken=true" -Method 'GET' -headers $headers
     $saasConnNum = $saasConn.rigelGroups.expectedNumberOfRigels
 
     Write-host "`nNumber of CCS AWS SaaS Connectors already implemented: $saasConnNum`n" 
@@ -173,8 +176,8 @@ if($saasConnNum -gt 0 -and $connAdd -eq $false){
     Write-host "`nThis CCS AWS Source already has $saasConnNum SaaS Connector(s) deployed!`n" -ForegroundColor Yellow
     write-output "`n$dateTime    WARN    This CCS AWS Source already has $saasConnNum SaaS Connector(s) deployed!`n" | Out-File -FilePath $outfileName -Append 
 
-    $connAddOverride = read-host -prompt "`nDo you need to add additional CCS AWS SaaS Connectors to the already existing CCS AWS SaaS Connection? (y/n)"
-    write-output "`n$dateTime    WARN    Do you need to add additional CCS AWS SaaS Connectors to the already existing CCS AWS SaaS Connection? (y/n)`nUSER RESPONSE: $connAddOverride" | Out-File -FilePath $outfileName -Append 
+    $connAddOverride = read-host -prompt "`nDo you need to add additional CCS AWS SaaS Connectors to the already existing CCS AWS SaaS Connection Group? (y/n)"
+    write-output "`n$dateTime    WARN    Do you need to add additional CCS AWS SaaS Connectors to the already existing CCS AWS SaaS Connection Group? (y/n)`nUSER RESPONSE: $connAddOverride" | Out-File -FilePath $outfileName -Append 
 
     if($connAddOverride -eq $false){
         Write-host "`nIf you are attempting to to create a new CCS AWS SaaS Connection Group in addition to the one which already exists, please know that Cohesity only supports one Connection Group per AWS Region.`n" -ForegroundColor Yellow
@@ -226,8 +229,8 @@ else{
 # create Payload for CCS API call
 
 if($AWSid){
-    Write-Host "`nPreparing CCS AWS SaaS Connection data for AWS ID: " $AWSid
-    write-output "`n$dateTime    INFO    Preparing CCS AWS SaaS Connection data for AWS ID: " $AWSid | Out-File -FilePath $outfileName -Append
+    Write-Host "`nPreparing CCS AWS SaaS Connection data for Connector Creation..."
+    write-output "`n$dateTime    INFO    Preparing CCS AWS SaaS Connection data for Connector Creation..." | Out-File -FilePath $outfileName -Append
     
     $body = @{
         "tenantId" = "$tenantId";
@@ -262,38 +265,91 @@ if($AWSid){
             }  
         }
 
-    Write-Host "`nDeploying CCS SaaS Connection for AWS Account ID $AWSaccount...`n" 
-    write-output "`n$dateTime    INFO    Deploying CCS SaaS Connection for AWS Account ID $AWSaccount...`n" | Out-File -FilePath $outfileName -Append     
+    Write-Host "`nCreating New CCS SaaS Connector for AWS Account ID $AWSaccount...`n" 
+    write-output "`n$dateTime    INFO    Creating New CCS SaaS Connector for AWS Account ID $AWSaccount...`n" | Out-File -FilePath $outfileName -Append     
 
     # prepare body of REST API Call
     write-host "Body Value: `n" $body
     #$bodyJson = $body | ConvertTo-Json 
     $bodyJson = ConvertTo-Json -Compress -Depth 99 $body 
-    write-host "`nDeployment of CCS SaaS Connection for AWS API Payload: `n$bodyJson"  
-    write-output "`n$dateTime    INFO    Deployment of CCS SaaS Connection for AWS API Payload: `n$bodyJson" | Out-File -FilePath $outfileName -Append  
+    write-host "`nCreation of New CCS SaaS Connector for AWS API Payload: `n$bodyJson"  
+    write-output "`n$dateTime    INFO    Creation of New CCS SaaS Connector for AWS API Payload: `n$bodyJson" | Out-File -FilePath $outfileName -Append  
 
-    Write-Host "`n*****Launching SaaS Connection in your selected subnets. This could take a few minutes.*****`n" 
-    write-output "`n$dateTime    INFO    *****Launching SaaS Connection in your selected subnets. This could take a few minutes.*****`n" | Out-File -FilePath $outfileName -Append 
+    Write-Host "`n*****Launching SaaS Connector in your selected subnets. This could take a few minutes.*****`n" 
+    write-output "`n$dateTime    INFO    *****Launching SaaS Connector in your selected subnets. This could take a few minutes.*****`n" | Out-File -FilePath $outfileName -Append 
 
 
-    # deploy AWS SaaS Connection
+    # create new AWS SaaS Connector
     $response = Invoke-RestMethod 'https://helios.cohesity.com/v2/mcm/rigelmgmt/rigel-groups' -Method 'POST' -Headers $headers -Body $bodyJson -ContentType 'application/json'     
     $response | ConvertTo-Json
     Write-host "$response" -ForegroundColor Green 
     
-    write-output "$dateTime    INFO    Response from Deployment of CCS SaaS Connection for AWS API Payload:  API: `n$response" | Out-File -FilePath $outfileName -Append
+    write-output "$dateTime    INFO    Response from Creation of New CCS SaaS Connector for AWS: `n$response" | Out-File -FilePath $outfileName -Append
 
-        if($response){
-            Write-host "`nDeployment of SaaS Connection in AWS Accouut ID $AWSaccount SUCCESSFUL!`n" -ForegroundColor Green
-            write-output "`n$dateTime    INFO    Deployment of SaaS Connection in AWS Accouut ID $AWSaccount SUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
-        }
-
-        else{
-            Write-host "`nDeployment of SaaS Connection in AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n" -ForegroundColor Red 
-            write-output "`n$dateTime    WARN    Deployment of SaaS Connection in AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
-        }
-
+    if($response){
+        Write-host "`nCreation of New CCS SaaS Connector for AWS Accouut ID $AWSaccount SUCCESSFUL!`n" -ForegroundColor Green
+        write-output "`n$dateTime    INFO    Creation of New CCS SaaS Connector for AWS Accouut ID $AWSaccount SUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
     }
+
+    else{
+        Write-host "`nCreation of New CCS SaaS Connector for AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n" -ForegroundColor Red 
+        write-output "`n$dateTime    WARN    Creation of New CCS SaaS Connector for AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
+    }
+
+    # associate new AWS Saas Connection to CCS AWS Source
+    $awsInfo = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/dms/tenants/regions/aws-cloud-source?tenantId=$tenantId&destinationRegionId=$AWSregionId&awsAccountNumber=$AWSid" -Method 'GET' -Headers $headers -ContentType 'application/json'
+    $iam_role_arn = $awsInfo.awsIamRoleArn
+    $cp_role_arn = $awsInfo.tenantCpRoleArn
+
+    $rigelInfo = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/data-protect/sources/registrations/$regId" -Method 'GET' -headers $headers
+    $subscription = $rigelInfo.awsParams.subscriptionType
+    $connections = $rigelInfo.connections
+
+    Write-Host "`nPreparing CCS AWS SaaS Connector data for association with AWS ID: " $AWSid
+    write-output "`n$dateTime    INFO    Preparing CCS AWS SaaS Connector data for association with AWS ID: " $AWSid | Out-File -FilePath $outfileName -Append
+    
+    $body = @{
+        "environment" = "kAWS";
+        "awsParams" = @{
+            "subscriptionType" = "$subscription";
+            "standardParams" = @{
+                "authMethodType" = "$AWSid";
+                "iamRoleAwsCredentials" = @{
+                    "iamRoleArn" = "$iam_role_arn";
+                    "cpIamRoleArn" = "$cp_role_arn"
+
+                }
+            }
+        };
+        "connections" = $connections
+    }
+
+    # prepare body of REST API Call
+    write-host "Body Value: `n" $body
+    $bodyJson = ConvertTo-Json -Compress -Depth 99 $body 
+    write-host "`nAssociation of New CCS AWS SaaS Connector with AWS Source Payload: `n$bodyJson"  
+    write-output "`n$dateTime    INFO    Association of New CCS AWS SaaS Connector with AWS Source Payload: `n$bodyJson" | Out-File -FilePath $outfileName -Append  
+
+    Write-Host "`nAssociating New CCS SaaS Connector with AWS Account ID $AWSaccount...`n" 
+    write-output "`n$dateTime    INFO    Associating New CCS SaaS Connector with AWS Account ID $AWSaccount...`n" | Out-File -FilePath $outfileName -Append  
+
+    $response = Invoke-RestMethod '"https://helios.cohesity.com/v2/mcm/data-protect/sources/registrations/$regId"' -Method 'POST' -Headers $headers -Body $bodyJson -ContentType 'application/json'     
+    $response | ConvertTo-Json
+    Write-host "$response" -ForegroundColor Green 
+    
+    write-output "$dateTime    INFO    Response from the Association of New CCS AWS SaaS Connector with AWS Source: `n$response" | Out-File -FilePath $outfileName -Append
+
+    if($response){
+        Write-host "`nAssociation of New CCS SaaS Connector with AWS Accouut ID $AWSaccount SUCCESSFUL!`n" -ForegroundColor Green
+        write-output "`n$dateTime    INFO    Association of New CCS SaaS Connector with AWS Accouut ID $AWSaccount SUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
+    }
+
+    else{
+        Write-host "`nAssociation of New CCS SaaS Connector with AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n" -ForegroundColor Red 
+        write-output "`n$dateTime    WARN    Association of New CCS SaaS Connector with AWS Accouut ID $AWSaccount UNSUCCESSFUL!`n"  | Out-File -FilePath $outfileName -Append
+    }
+}
+
 else {
     write-host "`nNo valid AWS Account ID' provided!`n" -ForegroundColor Yellow
     write-output "`n$dateTime    WARN    No valid AWS Account ID' provided!`n" | Out-File -FilePath $outfileName -Append 

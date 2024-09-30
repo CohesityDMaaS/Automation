@@ -1,4 +1,4 @@
-﻿# process commandline arguments
+# process commandline arguments
 [CmdletBinding()]
 param (
     [Parameter()][string]$username = 'DMaaS', # Your CCS username (username@emaildomain.com)
@@ -6,7 +6,7 @@ param (
     [Parameter(Mandatory = $True)][string]$sourceName,  # name of registered O365 source
     [Parameter()][array]$sites,  # optional names of SharePoint sites to unprotect
     [Parameter()][string]$siteList = '',  # optional textfile of SharePoint sites to unprotect
-    [Parameter(Mandatory = $False)][bool]$deleteAllSnapshots = $False,  # whether all Snapshots are deleted (default to $False)
+    [Parameter(Mandatory = $False)][bool]$deleteAllSnapshots = $false,  # whether all Snapshots are deleted (default to $False)
     [Parameter()][int]$pageSize = 50000
 )
 
@@ -63,7 +63,8 @@ $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.prote
 while(1){
     # implement pagination
     foreach($node in $users.nodes){
-        $nameIndex[$node.protectionSource.name] = $node.protectionSource.id
+        $uniqueKey = "$($node.protectionSource.name)-$($node.protectionSource.id)"
+        $nameIndex[$uniqueKey] = $node.protectionSource.id
     }
     $cursor = $users.nodes[-1].protectionSource.id
     $users = api get "protectionSources?pageSize=$pageSize&nodeId=$($sitesNode.protectionSource.id)&id=$($sitesNode.protectionSource.id)&hasValidSites=true&allUnderHierarchy=false&afterCursorEntityId=$cursor"
@@ -74,35 +75,33 @@ while(1){
 
 # find sites
 foreach($site in $sitesToAdd){
-    $userId = $null
-    if($smtpIndex.ContainsKey("$site")){
-        $userId = $smtpIndex["$site"]
+    $matches = $nameIndex.Keys | Where-Object { $_ -like "*$site*" }
+    if ($matches.Count -gt 0) {
+        foreach ($match in $matches) {
+            $userId = $nameIndex[$match]
+            write-host "Unprotecting $match.." 
+
+            # configure unprotection parameters
+            $unProtectionParams = @{
+                "action" = "UnProtect";
+                "objectActionKey" = "kO365Sharepoint";
+                "unProtectParams" = @{
+                    "objects" = @( 
+                        @{
+                            "id" = $userId;
+                            "deleteAllSnapshots" = $deleteAllSnapshots;
+                            "forceUnprotect" = $true;
+                        };
+                    );
+                };
+            }
+
+            # unprotect objects
+            $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
+            $unprotectResponse | out-file -filepath .\$outfileName -Append
+            Write-Host "Unprotected $match"
+        }
+    } else {
+        Write-Host "Unable to Find $site in order to unprotect." 
     }
-    elseif($nameIndex.ContainsKey("$site")){
-        $userId = $nameIndex["$site"]
-    }   
-if($userId){
-        write-host "Unprotecting $site.." 
-
-        # configure unprotection parameters
-        $unProtectionParams = @{
-            "action" = "UnProtect";
-            "objectActionKey" = "kO365Sharepoint";
-            "unProtectParams" = @{
-                "objects" = @( 
-                    @{
-                        "id" = $userID;
-                        "deleteAllSnapshots" = $deleteAllSnapshots;
-                        "forceUnprotect" = $true;
-                    };
-                );
-            };
-           }
-
-		       # unprotect objects
-        $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-        $unprotectResponse | out-file -filepath .\$outfileName -Append
-        Write-Host "Unprotected $site"
-		}
-    Else {"Unable to Find $site in order to unprotect." }
-   }
+}
