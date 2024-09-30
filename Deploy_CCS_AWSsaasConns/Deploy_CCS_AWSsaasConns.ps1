@@ -297,11 +297,12 @@ if($AWSid){
     }
 
     # associate new AWS Saas Connection to CCS AWS Source
-    $awsInfo = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/dms/tenants/regions/aws-cloud-source?tenantId=$tenantId&destinationRegionId=$AWSregionId&awsAccountNumber=$AWSid-" -Method 'GET' -Headers $headers -ContentType 'application/json'
+    $awsInfo = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/dms/tenants/regions/aws-cloud-source?tenantId=$tenantId&destinationRegionId=$AWSregionId&awsAccountNumber=$AWSid" -Method 'GET' -Headers $headers -ContentType 'application/json'
     $iam_role_arn = $awsInfo.awsIamRoleArn
     $cp_role_arn = $awsInfo.tenantCpRoleArn
 
     $rigelInfo = Invoke-RestMethod "https://helios.cohesity.com/v2/mcm/data-protect/sources/registrations/$regId" -Method 'GET' -headers $headers
+    $subscription = $rigelInfo.awsParams.subscriptionType
     $connections = $rigelInfo.connections
 
     Write-Host "`nPreparing CCS AWS SaaS Connector data for association with AWS ID: " $AWSid
@@ -310,7 +311,7 @@ if($AWSid){
     $body = @{
         "environment" = "kAWS";
         "awsParams" = @{
-            "subscriptionType" = "kAWSCommercial" ;
+            "subscriptionType" = "$subscription";
             "standardParams" = @{
                 "authMethodType" = "$AWSid";
                 "iamRoleAwsCredentials" = @{
