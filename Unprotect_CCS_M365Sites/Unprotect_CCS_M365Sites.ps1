@@ -75,33 +75,89 @@ while(1){
 
 # find sites
 foreach($site in $sitesToAdd){
-    $matches = $nameIndex.Keys | Where-Object { $_ -like "*$site*" }
-    if ($matches.Count -gt 0) {
-        foreach ($match in $matches) {
+    $matchSites = $nameIndex.Keys | Where-Object { $_ -like "*$site*" }
+    
+    if ($matchSites.Count -gt 0) {
+        foreach ($match in $matchSites) {
             $userId = $nameIndex[$match]
-            write-host "Unprotecting $match.." 
 
-            # configure unprotection parameters
-            $unProtectionParams = @{
-                "action" = "UnProtect";
-                "objectActionKey" = "kO365Sharepoint";
-                "unProtectParams" = @{
-                    "objects" = @( 
-                        @{
-                            "id" = $userId;
-                            "deleteAllSnapshots" = $deleteAllSnapshots;
-                            "forceUnprotect" = $true;
-                        };
-                    );
-                };
+            # Attempt to get protection status for the site
+            try {
+                Write-Host "Checking protection status for $match..." -ForegroundColor Cyan
+                #$protectionStatus = api get -v2 "data-protect/protected-objects/$userId"
+                $protectionStatus = api get -v2 "data-protect/search/protected-objects?objectIds=$userId&objectActionKey=kO365Sharepoint"                
+                
+                if ($protectionStatus) {
+                    if ($protectionStatus.numResults -gt 0) {
+                        Write-Host "Unprotecting $match..." -ForegroundColor Green
+                        # Configure unprotection parameters
+                        $unProtectionParams = @{
+                            "action" = "UnProtect";
+                            "objectActionKey" = "kO365Sharepoint";
+                            "unProtectParams" = @{
+                                "objects" = @( 
+                                    @{
+                                        "id" = $userId;
+                                        "deleteAllSnapshots" = $deleteAllSnapshots;
+                                        "forceUnprotect" = $true;
+                                    };
+                                );
+                            };
+                        }
+
+                        # Unprotect objects
+                        $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
+                        $unprotectResponse | out-file -filepath .\$outfileName -Append
+                        Write-Host "Unprotected $match" -ForegroundColor Green
+                    } else {
+                        Write-Host "$match is not currently protected, skipping unprotection." -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "Protection status for $match not found, skipping." -ForegroundColor Red
+                }
             }
-
-            # unprotect objects
-            $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-            $unprotectResponse | out-file -filepath .\$outfileName -Append
-            Write-Host "Unprotected $match"
+            catch {
+                # Handle the case where protection status is not found (i.e., not protected)
+                Write-Host "Error fetching protection status for $match, skipping." -ForegroundColor Red
+            }
         }
     } else {
-        Write-Host "Unable to Find $site in order to unprotect." 
+        Write-Host "Unable to find $site in order to unprotect." -ForegroundColor Yellow
     }
 }
+
+
+
+
+# find sites
+#foreach($site in $sitesToAdd){
+#    $matches = $nameIndex.Keys | Where-Object { $_ -like "*$site*" }
+#    if ($matches.Count -gt 0) {
+#        foreach ($match in $matches) {
+#            $userId = $nameIndex[$match]
+#            write-host "Unprotecting $match.." 
+
+            # configure unprotection parameters
+#            $unProtectionParams = @{
+#               "action" = "UnProtect";
+#                "objectActionKey" = "kO365Sharepoint";
+#                "unProtectParams" = @{
+#                    "objects" = @( 
+#                        @{
+#                            "id" = $userId;
+#                            "deleteAllSnapshots" = $deleteAllSnapshots;
+#                            "forceUnprotect" = $true;
+#                        };
+#                    );
+#                };
+#            }
+
+            # unprotect objects
+#           $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
+#            $unprotectResponse | out-file -filepath .\$outfileName -Append
+#            Write-Host "Unprotected $match"
+#        }
+#    } else {
+#        Write-Host "Unable to Find $site in order to unprotect." 
+#    }
+#}
