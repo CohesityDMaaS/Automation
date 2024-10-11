@@ -20,11 +20,12 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main'
 ## Components
 
 * deployAWSsaasConns.ps1: the main powershell script
+* cohesity-api.ps1: Cohesity API Integration script
 
 Run the main script like so:
 
 ```powershell
-./deployAWSsaasConns.ps1 -apiKey #### -CCSregionId us-east-1 -AWSregionId us-east-1 -AWSid #### -subnetId subnet-#### -securityGroupId sg-#### -vpcId vpc-#### -saasNo 2 -AWStag "label=value", "label=value" -connAdd
+./deployAWSsaasConns.ps1 -apiKey #### -CCSregionId us-east-1 -AWSregionId us-east-1 -AWSid #### -subnetId subnet-#### -securityGroupId sg-#### -vpcId vpc-#### -saasNo 2 -AWStag "label=value", "label=value"
 ```
 
 ## Parameters
@@ -39,7 +40,6 @@ Run the main script like so:
 * -saasNo: (optional) Number of AWS SaaS Connector EC2 Instances to create
 * -AWStag: (optional) AWS SaaS Connector EC2 Instance Tags (comma separated). example: "label=value", "label2=value2"
 * -AWStags: (optional) text file of AWS SaaS Connector EC2 Instance Tags (one per line)
-* -connAdd: switch to append to command line when adding addition CCS AWS SaaS Connectors to an already existing SaaS Connection Group
 
 ## Authenticating to CCS
 
