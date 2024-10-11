@@ -125,39 +125,3 @@ foreach($site in $sitesToAdd){
         Write-Host "Unable to find $site in order to unprotect." -ForegroundColor Yellow
     }
 }
-
-
-
-
-# find sites
-#foreach($site in $sitesToAdd){
-#    $matches = $nameIndex.Keys | Where-Object { $_ -like "*$site*" }
-#    if ($matches.Count -gt 0) {
-#        foreach ($match in $matches) {
-#            $userId = $nameIndex[$match]
-#            write-host "Unprotecting $match.." 
-
-            # configure unprotection parameters
-#            $unProtectionParams = @{
-#               "action" = "UnProtect";
-#                "objectActionKey" = "kO365Sharepoint";
-#                "unProtectParams" = @{
-#                    "objects" = @( 
-#                        @{
-#                            "id" = $userId;
-#                            "deleteAllSnapshots" = $deleteAllSnapshots;
-#                            "forceUnprotect" = $true;
-#                        };
-#                    );
-#                };
-#            }
-
-            # unprotect objects
-#           $unprotectResponse = api post -v2 data-protect/protected-objects/actions $unProtectionParams 
-#            $unprotectResponse | out-file -filepath .\$outfileName -Append
-#            Write-Host "Unprotected $match"
-#        }
-#    } else {
-#        Write-Host "Unable to Find $site in order to unprotect." 
-#    }
-#}
