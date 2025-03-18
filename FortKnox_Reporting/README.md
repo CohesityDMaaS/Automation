@@ -42,8 +42,8 @@ All Helios connected clusters Example
 
 Helios uses an API key for authentication. To acquire an API key:
 
-* log onto Cohesity Cloud Services>FortKnox
-* click Settings -> access management -> API Keys
+* log onto Cohesity Cloud Services>Security>FortKnox
+* click Settings -> Access Management -> API Keys
 * click Add API Key
 * enter a name for your key
 * click Save
