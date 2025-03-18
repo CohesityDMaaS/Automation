@@ -31,7 +31,7 @@
 param (
     [Parameter()][string]$apiKey = '',  # apiKey
     [Parameter()][string]$vip = 'helios.cohesity.com',
-    [Parameter()][string]$username = '',
+    [Parameter(mandatory = 'true')][string]$username = '',
     [Parameter()][string]$clusterName = $null, #specify a specific cluster replacing $null with the name, otherwise all clusters connected to the Helios Tenant will be in scope
     [Parameter()][int]$numRuns = 1000,
     [Parameter()][ValidateSet('MiB','GiB')][string]$unit = 'MiB'
