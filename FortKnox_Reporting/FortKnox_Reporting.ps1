@@ -94,7 +94,7 @@ ForEach($clusterName in $clusternames){
 
 # Create the CSV  outfile- You can comment out the below lines if you prefer to use the Excel export option below
 Write-Host "Creating output csv file for Cluster $Clustername" -ForegroundColor Green
-$dateString = (get-date).ToString('yyyy-MM-dd')
+$dateString = (get-date).ToString('yyyy-MM-dd-HH-mm')
 $outfileNamecsv = "vaultInventory-$($clustername)-$dateString.csv"
                                
 # Define the excel output file path- You can comment out the below lines if you prefer to use the CSV option above
