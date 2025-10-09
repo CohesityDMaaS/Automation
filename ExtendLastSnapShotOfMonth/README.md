@@ -9,11 +9,12 @@ This script will extend the retention of the last-day-of-month snapshots to the 
 Run these commands from PowerShell to download the script(s) into your current directory
 
 ```powershell
-# Download Commands
-$scriptName = 'ExtendLastSnapShotofMonth'
-$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/'
-(Invoke-WebRequest -Uri "$repoUrl/$scriptName/$scriptName.ps1").content | Out-File "$scriptName.ps1"; (Get-Content "$scriptName.ps1") | Set-Content "$scriptName.ps1"
-(Invoke-WebRequest -Uri "$repoUrl/$scriptName/cohesity-api.ps1").content | Out-File cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
+# End Download Commands
+$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/ExtendLastSnapShotOfMonth'
+# Download the main script
+(Invoke-WebRequest -Uri "$repoURL/ExtendLastSnapShotOfMonth.ps1").Content | Out-File "ExtendLastSnapShotOfMonth.ps1"
+# Download the dependency (cohesity-api.ps1) in same folder
+(Invoke-WebRequest -Uri "$repoURL/cohesity-api.ps1").Content | Out-File "cohesity-api.ps1"
 # End Download Commands
 ```
 
