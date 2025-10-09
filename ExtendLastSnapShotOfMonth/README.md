@@ -38,11 +38,11 @@ Then, if you're happy with the list of snapshots to be processed, run the script
 
 ## Parameters
 
-* -vip: **(Required)** Cohesity Cluster to connect to
-* -username: **(Required)** Cohesity username
-* -dryrun: **(Required)** performs a Dry Run of extensions
-* -commit: **(Required)** perform extensions
-* -extendmonths: **(Required)** number of months to extend
+* **-vip: (Required)** Cohesity Cluster to connect to
+* **-username: (Required)** Cohesity username
+* **-dryrun: (Required)** performs a Dry Run of extensions
+* **-commit: (Required)** perform extensions
+* **-extendmonths: (Required)** number of months to extend
 * -domain: (optional) Active Directory domain of user (defaults to local)
   
 ## Job Selection Parameters (default is all local jobs)
