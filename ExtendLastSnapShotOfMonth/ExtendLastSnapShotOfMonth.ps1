@@ -12,6 +12,8 @@ param (
     [Parameter()][switch]$commit,
     [Parameter(Mandatory = $True)][int]$extendMonths,
     [Parameter()][switch]$IncludeSnapshotDay,
+    [Parameter()][switch]$IncludeCrossMonth,
+    [Parameter()][switch]$IncludeReverseCrossMonth,
     [Parameter()][string]$LogPath,
     [Parameter()][switch]$DryRun
 )
@@ -32,9 +34,11 @@ if (-not $LogPath -or $LogPath -eq '') {
     $LogPath = "extendLog_$timestamp.txt"
 }
 
+$logFullPath = Join-Path -Path $PWD -ChildPath $LogPath
+
 # Ensure log file exists
-if (-not (Test-Path $LogPath)) {
-    "" | Out-File -FilePath $LogPath -Encoding UTF8
+if (-not (Test-Path $logFullPath)) {
+    "" | Out-File -FilePath $logFullPath -Encoding UTF8
 }
 
 # -------------------------------------------------------------
@@ -54,11 +58,15 @@ if ('' -ne $policyList -and (Test-Path -Path $policyList -PathType Leaf)) {
     $policiesToUpdate += Get-Content $policyList | ForEach-Object { $_.Trim() }
 }
 
+Write-Verbose "Jobs to update: $($jobsToUpdate -join ', ')"
+Write-Verbose "Policies to update: $($policiesToUpdate -join ', ')"
+
 # -------------------------------------------------------------
 # Load Cohesity API helper and authenticate
 # -------------------------------------------------------------
 . $(Join-Path -Path $PSScriptRoot -ChildPath cohesity-api.ps1)
 apiauth -vip $vip -username $username -domain $domain
+Write-Verbose "Authenticated with Cohesity cluster $vip"
 
 # -------------------------------------------------------------
 # Retrieve jobs and policies
@@ -72,6 +80,8 @@ if ($policiesToUpdate) {
     $policies = $policies | Where-Object name -in $policiesToUpdate
     $jobs = $jobs | Where-Object { $_.policyId -in @($policies.id) }
 }
+
+Write-Verbose "Jobs retrieved and filtered: $($jobs.Count)"
 
 # -------------------------------------------------------------
 # Calculate retention period
@@ -94,10 +104,8 @@ if ($IncludeSnapshotDay) {
 $usecsPerDay = 86400000000
 
 # -------------------------------------------------------------
-# Display header info with highlighted Dry Run / Commit
+# Display header info
 # -------------------------------------------------------------
-$modeText = if ($Commit) { "COMMIT MODE ACTIVE" } else { "DRY RUN MODE ACTIVE" }
-
 Write-Host ""
 Write-Host "📅 Retention Calculation Summary" -ForegroundColor Cyan
 Write-Host "-------------------------------------------"
@@ -110,19 +118,19 @@ if ($DryRun) {
 } else {
     Write-Host ("✅ COMMIT MODE ACTIVE") -ForegroundColor Green
 }
-Write-Host ("Log file:                        {0}" -f (Join-Path -Path $PWD -ChildPath $LogPath))
+Write-Host ("Log file:                        {0}" -f $logFullPath)
 Write-Host ""
 
 # -------------------------------------------------------------
-# Prepare logging and result collection
+# Prepare logging
 # -------------------------------------------------------------
-"`nScript started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n" | Out-File -FilePath $LogPath -Append
+"`nScript started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n" | Out-File -FilePath $logFullPath -Append
 if ($DryRun) {
-    "⚠️  THIS RUN IS A DRY RUN. NO CHANGES WERE MADE.`n" | Out-File -FilePath $LogPath -Append
+    "⚠️  THIS RUN IS A DRY RUN. NO CHANGES WERE MADE.`n" | Out-File -FilePath $logFullPath -Append
 } else {
-    "✅ CHANGES WILL BE COMMITTED.`n" | Out-File -FilePath $LogPath -Append
+    "✅ CHANGES WILL BE COMMITTED.`n" | Out-File -FilePath $logFullPath -Append
 }
-"Retention extended by $extendMonths month(s) $inclusionNote`n" | Out-File -FilePath $LogPath -Append
+"Retention extended by $extendMonths month(s) $inclusionNote`n" | Out-File -FilePath $logFullPath -Append
 
 $results = @()
 
@@ -130,63 +138,82 @@ $results = @()
 # Process each job
 # -------------------------------------------------------------
 foreach ($job in $jobs | Sort-Object -Property name) {
+
+    Write-Verbose "Processing job $($job.name)"
+
+    # Define start/end window for last day of previous month
     $startTimeUsecs = [int64]((Get-Date $lastDayPrevMonth -Hour 0 -Minute 0 -Second 0).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds * 1000
-    $endTimeUsecs = [int64]((Get-Date $lastDayPrevMonth -Hour 23 -Minute 59 -Second 59).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds * 1000
+    $endTimeUsecs = [int64]((Get-Date $lastDayPrevMonth.AddDays(1) -Hour 23 -Minute 59 -Second 59).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds * 1000
 
     $runs = (api get -v2 "data-protect/protection-groups/$($job.id)/runs?startTimeUsecs=$startTimeUsecs&endTimeUsecs=$endTimeUsecs&numRuns=9999&includeObjectDetails=false&runTypes=kSystem,kIncremental,kFull").runs
-    $latestRun = $runs | Sort-Object { usecsToDate $_.localBackupInfo.startTimeUsecs } -Descending | Select-Object -First 1
+    Write-Verbose "Retrieved $($runs.Count) runs for $($job.name) in window"
 
-    if ($latestRun) {
-        $runStartUsecs = if ($latestRun.isReplicationRun) { $latestRun.originalBackupInfo.startTimeUsecs } else { $latestRun.localBackupInfo.startTimeUsecs }
+    # Filter runs starting or ending on last day, cross-month included if requested
+    $latestRun = $runs |
+        Where-Object {
+            $runStartDate = (usecsToDate $_.localBackupInfo.startTimeUsecs).Date
+            $runEndDate = (usecsToDate $_.localBackupInfo.endTimeUsecs).Date
+            ($runStartDate -eq $lastDayPrevMonth.Date) -or
+            ($IncludeCrossMonth -and $runStartDate -lt $lastDayPrevMonth.Date -and $runEndDate -eq $lastDayPrevMonth.Date) -or
+            ($IncludeReverseCrossMonth -and $runStartDate -eq $lastDayPrevMonth.Date -and $runEndDate -gt $lastDayPrevMonth.Date)
+        } |
+        Sort-Object { usecsToDate $_.localBackupInfo.startTimeUsecs } -Descending |
+        Select-Object -First 1
 
-        $thisrun = api get "/backupjobruns?allUnderHierarchy=true&exactMatchStartTimeUsecs=$runStartUsecs&excludeTasks=true&id=$($job.id.split(':')[-1])"
-        $currentExpireTimeUsecs = ($thisrun.backupJobRuns.protectionRuns[0].copyRun.finishedTasks | Where-Object {$_.snapshotTarget.type -eq 1}).expiryTimeUsecs
-        $newExpireTimeUsecs = $runStartUsecs + ($daysToKeep * $usecsPerDay)
-        $daysToExtend = [int][math]::Round(($newExpireTimeUsecs - $currentExpireTimeUsecs) / $usecsPerDay)
+    if (-not $latestRun) {
+        Write-Verbose "No applicable run found for $($job.name)"
+        continue
+    }
 
-        $snapshotDate = (usecsToDate $runStartUsecs).ToString('yyyy-MM-dd')
-        $currentExpireDate = (usecsToDate $currentExpireTimeUsecs).ToString('yyyy-MM-dd')
-        $newExpireDate = (usecsToDate $newExpireTimeUsecs).ToString('yyyy-MM-dd')
+    $runStartUsecs = if ($latestRun.isReplicationRun) { $latestRun.originalBackupInfo.startTimeUsecs } else { $latestRun.localBackupInfo.startTimeUsecs }
+    $thisrun = api get "/backupjobruns?allUnderHierarchy=true&exactMatchStartTimeUsecs=$runStartUsecs&excludeTasks=true&id=$($job.id.split(':')[-1])"
+    $currentExpireTimeUsecs = ($thisrun.backupJobRuns.protectionRuns[0].copyRun.finishedTasks | Where-Object {$_.snapshotTarget.type -eq 1}).expiryTimeUsecs
+    $newExpireTimeUsecs = $runStartUsecs + ($daysToKeep * $usecsPerDay)
+    $daysToExtend = [int][math]::Round(($newExpireTimeUsecs - $currentExpireTimeUsecs) / $usecsPerDay)
 
-        # Add to results for table
-        $results += [pscustomobject]@{
-            JobName           = $job.name
-            SnapshotDate      = $snapshotDate
-            CurrentExpiryDate = $currentExpireDate
-            NewExpiryDate     = $newExpireDate
-            DaysExtended      = $daysToExtend
-        }
+    $snapshotDate = (usecsToDate $runStartUsecs).ToString('yyyy-MM-dd')
+    $currentExpireDate = (usecsToDate $currentExpireTimeUsecs).ToString('yyyy-MM-dd')
+    $newExpireDate = (usecsToDate $newExpireTimeUsecs).ToString('yyyy-MM-dd')
 
-        # Commit retention changes if switch is set
-        if ($commit -and $daysToExtend -gt 0) {
-            $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-            "$timestamp - $($job.name): $snapshotDate ($currentExpireDate -> $newExpireDate)" | Out-File -FilePath $LogPath -Append
+    Write-Verbose "$($job.name) snapshot: $snapshotDate, current expiry: $currentExpireDate, new expiry: $newExpireDate"
 
-            $runParameters = @{
-                "jobRuns" = @(
-                    @{
-                        "jobUid" = @{
-                            "clusterId" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.clusterId;
-                            "clusterIncarnationId" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.clusterIncarnationId;
-                            "id" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.objectId
-                        }
-                        "runStartTimeUsecs" = $runStartUsecs;
-                        "copyRunTargets" = @(
-                            @{
-                                "daysToKeep" = [int]$daysToExtend;
-                                "type" = "kLocal"
-                            }
-                        )
+    $results += [pscustomobject]@{
+        JobName           = $job.name
+        SnapshotDate      = $snapshotDate
+        CurrentExpiryDate = $currentExpireDate
+        NewExpiryDate     = $newExpireDate
+        DaysExtended      = $daysToExtend
+    }
+
+    # Commit retention changes if requested
+    if ($commit -and $daysToExtend -gt 0) {
+        $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        "$timestamp - $($job.name): $snapshotDate ($currentExpireDate -> $newExpireDate)" | Out-File -FilePath $logFullPath -Append
+
+        $runParameters = @{
+            "jobRuns" = @(
+                @{
+                    "jobUid" = @{
+                        "clusterId" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.clusterId;
+                        "clusterIncarnationId" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.clusterIncarnationId;
+                        "id" = $thisrun.backupJobRuns.protectionRuns[0].copyRun.jobUid.objectId
                     }
-                )
-            }
-            $null = api put protectionRuns $runParameters
+                    "runStartTimeUsecs" = $runStartUsecs;
+                    "copyRunTargets" = @(
+                        @{
+                            "daysToKeep" = [int]$daysToExtend;
+                            "type" = "kLocal"
+                        }
+                    )
+                }
+            )
         }
+        $null = api put protectionRuns $runParameters
     }
 }
 
 # -------------------------------------------------------------
-# Output summary table to console and log
+# Output summary table
 # -------------------------------------------------------------
 if ($results.Count -gt 0) {
     Write-Host ""
@@ -222,14 +249,12 @@ if ($results.Count -gt 0) {
     $logLines += "---------------------------------------------------------------"
     $logLines += "Total Jobs: $totalJobs, Extended: $totalJobsExtended, Total Days Extended: $totalDaysExtended"
 
-    # Include DryRun / Commit info in log
     if ($DryRun) { $logLines += "⚠️  THIS RUN WAS A DRY RUN. NO CHANGES WERE MADE." } else { $logLines += "✅ CHANGES WERE COMMITTED." }
 
-    # Write log
-    $logLines | Out-File -FilePath $LogPath -Encoding UTF8
+    $logLines | Out-File -FilePath $logFullPath -Encoding UTF8
 } else {
     Write-Host ""
     Write-Warning "No applicable snapshots found for retention extension."
-    "No applicable snapshots found for retention extension." | Out-File -FilePath $LogPath -Encoding UTF8
-    if ($DryRun) { "⚠️  THIS RUN WAS A DRY RUN. NO CHANGES WERE MADE." | Out-File -FilePath $LogPath -Append } else { "✅ CHANGES WERE COMMITTED." | Out-File -FilePath $LogPath -Append }
+    "No applicable snapshots found for retention extension." | Out-File -FilePath $logFullPath -Encoding UTF8
+    if ($DryRun) { "⚠️  THIS RUN WAS A DRY RUN. NO CHANGES WERE MADE." | Out-File -FilePath $logFullPath -Append } else { "✅ CHANGES WERE COMMITTED." | Out-File -FilePath $logFullPath -Append }
 }
