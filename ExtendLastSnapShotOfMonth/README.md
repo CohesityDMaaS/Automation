@@ -45,6 +45,9 @@ Then, if you're happy with the list of snapshots to be processed, run the script
 * **-extendmonths: (Required)** number of months to extend
 * -domain: (optional) Active Directory domain of user (defaults to local)
 * -includeSnapshotDay: (optional) includes the snapshot day (To correct being 1 day off)
+* -includecrossmonth: (optional) includes snaphsots that start before the last day of the month but end on that day
+* -includereversecrossmonth: (optional) includes snapshots that start on the last day of the month but end after it
+* -logpath: (optional) custom log file path. If not provided, one is auto-generated ( extendLog_YYYY-MM-DD_HHmm.txt ) 
   
 ## Job Selection Parameters (default is all local jobs)
 
