@@ -15,7 +15,10 @@ param (
     [Parameter()][switch]$IncludeCrossMonth,
     [Parameter()][switch]$IncludeReverseCrossMonth,
     [Parameter()][string]$LogPath,
-    [Parameter()][switch]$DryRun
+    [Parameter()][switch]$DryRun,
+    [Parameter()][switch]$DebugLog,
+    [Parameter()][int]$MaxLogs = 10,
+    [Parameter()][switch]$ArchiveOldLogs
 )
 
 # -------------------------------------------------------------
@@ -42,6 +45,73 @@ if (-not (Test-Path $logFullPath)) {
 }
 
 # -------------------------------------------------------------
+# Logging helper functions
+# -------------------------------------------------------------
+function Write-DebugLog($message) {
+    if ($DebugLog) {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $line = "[DEBUG] $timestamp | $message"
+        Write-Host $line -ForegroundColor Gray
+        $line | Out-File -FilePath $logFullPath -Append
+    }
+}
+
+function Write-ErrorLog($message, $exception=$null) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[ERROR] $timestamp | $message"
+    Write-Host $line -ForegroundColor Red
+    $line | Out-File -FilePath $logFullPath -Append
+    if ($exception) {
+        $exc = $exception.Exception.Message
+        $exc | Out-File -FilePath $logFullPath -Append
+    }
+}
+
+function Write-InfoLog($message) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[INFO] $timestamp | $message"
+    Write-Host $line -ForegroundColor White
+    $line | Out-File -FilePath $logFullPath -Append
+}
+
+# -------------------------------------------------------------
+# Log rotation
+# -------------------------------------------------------------
+$logPattern = "extendLog_*.txt"
+$logDir = Split-Path -Parent $logFullPath
+$logFiles = Get-ChildItem -Path $logDir -Filter $logPattern | Sort-Object LastWriteTime -Descending
+
+if ($logFiles.Count -gt $MaxLogs) {
+    $logsToRemove = $logFiles[$MaxLogs..($logFiles.Count - 1)]
+
+    if ($ArchiveOldLogs) {
+        $archiveName = "archivedLogs_{0}.zip" -f (Get-Date -Format "yyyyMMdd_HHmmss")
+        $archivePath = Join-Path -Path $logDir -ChildPath $archiveName
+        Write-InfoLog "Archiving old logs to: $archivePath"
+        Write-DebugLog "Archiving $($logsToRemove.Count) old log files to $archivePath"
+
+        try {
+            Compress-Archive -Path $logsToRemove.FullName -DestinationPath $archivePath -Force
+            $logsToRemove | ForEach-Object { Remove-Item $_.FullName -Force }
+            Write-DebugLog "Old logs archived and removed successfully."
+        } catch {
+            Write-ErrorLog "Failed to archive old logs" $_
+        }
+    } else {
+        Write-InfoLog "Removing old logs (keeping last $MaxLogs)..."
+        $logsToRemove | ForEach-Object {
+            try {
+                Remove-Item $_.FullName -Force
+                Write-DebugLog "Deleted old log: $($_.Name)"
+            } catch {
+                Write-ErrorLog "Failed to delete old log: $($_.FullName)" $_
+            }
+        }
+    }
+}
+Write-DebugLog "Log rotation complete. Active logs retained: $MaxLogs"
+
+# -------------------------------------------------------------
 # Gather job and policy lists
 # -------------------------------------------------------------
 $jobsToUpdate = @()
@@ -58,15 +128,15 @@ if ('' -ne $policyList -and (Test-Path -Path $policyList -PathType Leaf)) {
     $policiesToUpdate += Get-Content $policyList | ForEach-Object { $_.Trim() }
 }
 
-Write-Verbose "Jobs to update: $($jobsToUpdate -join ', ')"
-Write-Verbose "Policies to update: $($policiesToUpdate -join ', ')"
+Write-DebugLog "Jobs to update: $($jobsToUpdate -join ', ')"
+Write-DebugLog "Policies to update: $($policiesToUpdate -join ', ')"
 
 # -------------------------------------------------------------
 # Load Cohesity API helper and authenticate
 # -------------------------------------------------------------
 . $(Join-Path -Path $PSScriptRoot -ChildPath cohesity-api.ps1)
 apiauth -vip $vip -username $username -domain $domain
-Write-Verbose "Authenticated with Cohesity cluster $vip"
+Write-DebugLog "Authenticated with Cohesity cluster $vip"
 
 # -------------------------------------------------------------
 # Retrieve jobs and policies
@@ -81,7 +151,7 @@ if ($policiesToUpdate) {
     $jobs = $jobs | Where-Object { $_.policyId -in @($policies.id) }
 }
 
-Write-Verbose "Jobs retrieved and filtered: $($jobs.Count)"
+Write-DebugLog "Jobs retrieved and filtered: $($jobs.Count)"
 
 # -------------------------------------------------------------
 # Calculate retention period
@@ -102,6 +172,7 @@ if ($IncludeSnapshotDay) {
 }
 
 $usecsPerDay = 86400000000
+Write-DebugLog "Retention days calculated: $daysToKeep ($inclusionNote)"
 
 # -------------------------------------------------------------
 # Display header info
@@ -122,7 +193,7 @@ Write-Host ("Log file:                        {0}" -f $logFullPath)
 Write-Host ""
 
 # -------------------------------------------------------------
-# Prepare logging
+# Begin logging
 # -------------------------------------------------------------
 "`nScript started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n" | Out-File -FilePath $logFullPath -Append
 if ($DryRun) {
@@ -139,16 +210,14 @@ $results = @()
 # -------------------------------------------------------------
 foreach ($job in $jobs | Sort-Object -Property name) {
 
-    Write-Verbose "Processing job $($job.name)"
+    Write-DebugLog "Processing job $($job.name)"
 
-    # Define start/end window for last day of previous month
     $startTimeUsecs = [int64]((Get-Date $lastDayPrevMonth -Hour 0 -Minute 0 -Second 0).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds * 1000
     $endTimeUsecs = [int64]((Get-Date $lastDayPrevMonth.AddDays(1) -Hour 23 -Minute 59 -Second 59).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds * 1000
 
     $runs = (api get -v2 "data-protect/protection-groups/$($job.id)/runs?startTimeUsecs=$startTimeUsecs&endTimeUsecs=$endTimeUsecs&numRuns=9999&includeObjectDetails=false&runTypes=kSystem,kIncremental,kFull").runs
-    Write-Verbose "Retrieved $($runs.Count) runs for $($job.name) in window"
+    Write-DebugLog "Retrieved $($runs.Count) runs for $($job.name)"
 
-    # Filter runs starting or ending on last day, cross-month included if requested
     $latestRun = $runs |
         Where-Object {
             $runStartDate = (usecsToDate $_.localBackupInfo.startTimeUsecs).Date
@@ -161,7 +230,7 @@ foreach ($job in $jobs | Sort-Object -Property name) {
         Select-Object -First 1
 
     if (-not $latestRun) {
-        Write-Verbose "No applicable run found for $($job.name)"
+        Write-DebugLog "No applicable run found for $($job.name)"
         continue
     }
 
@@ -175,7 +244,7 @@ foreach ($job in $jobs | Sort-Object -Property name) {
     $currentExpireDate = (usecsToDate $currentExpireTimeUsecs).ToString('yyyy-MM-dd')
     $newExpireDate = (usecsToDate $newExpireTimeUsecs).ToString('yyyy-MM-dd')
 
-    Write-Verbose "$($job.name) snapshot: $snapshotDate, current expiry: $currentExpireDate, new expiry: $newExpireDate"
+    Write-DebugLog "$($job.name) snapshot: $snapshotDate, current expiry: $currentExpireDate, new expiry: $newExpireDate"
 
     $results += [pscustomobject]@{
         JobName           = $job.name
@@ -189,6 +258,7 @@ foreach ($job in $jobs | Sort-Object -Property name) {
     if ($commit -and $daysToExtend -gt 0) {
         $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         "$timestamp - $($job.name): $snapshotDate ($currentExpireDate -> $newExpireDate)" | Out-File -FilePath $logFullPath -Append
+        Write-DebugLog "Updating retention for $($job.name)"
 
         $runParameters = @{
             "jobRuns" = @(
@@ -208,7 +278,12 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                 }
             )
         }
-        $null = api put protectionRuns $runParameters
+        try {
+            $null = api put protectionRuns $runParameters
+            Write-DebugLog "Retention updated successfully for $($job.name)"
+        } catch {
+            Write-ErrorLog "Failed to update retention for $($job.name)" $_
+        }
     }
 }
 
