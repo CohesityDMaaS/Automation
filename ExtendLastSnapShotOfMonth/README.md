@@ -44,7 +44,10 @@ Then, if you're happy with the list of snapshots to be processed, run the script
 * **-commit: (Required)** perform extensions
 * **-extendmonths: (Required)** number of months to extend
 * -domain: (optional) Active Directory domain of user (defaults to local)
-* -logpath: (optional) custom log file path. If not provided, one is auto-generated ( extendLog_YYYY-MM-DD_HHmm.txt ) 
+* -logpath: (optional) custom log file path. If not provided, one is auto-generated ( extendLog_YYYY-MM-DD_HHmm.txt )
+* -DebugLog: (optional) Enable verbose debug-level output to both consle and log file for troubleshooting
+* -MaxLogs: (optional) Maximum number of log files to keep before rotating. Defaults to 10
+* -ArchiveOldLogs: (optional) Instead of deleting old logs, compress them into a .zip archive before removal
   
 ## Job Selection Parameters (default is all local jobs)
 
