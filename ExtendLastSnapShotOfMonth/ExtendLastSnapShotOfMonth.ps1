@@ -139,18 +139,31 @@ apiauth -vip $vip -username $username -domain $domain
 Write-DebugLog "Authenticated with Cohesity cluster $vip"
 
 # -------------------------------------------------------------
-# Retrieve jobs and policies
+# Retrieve jobs and apply filters including -includeReplicas
 # -------------------------------------------------------------
-$jobs = (api get -v2 data-protect/protection-groups).protectionGroups | Where-Object isDeleted -ne $True
-if ($jobsToUpdate) { $jobs = $jobs | Where-Object name -in $jobsToUpdate }
-if (!$includeReplicas) { $jobs = $jobs | Where-Object isActive -eq $True }
+$allJobs = (api get -v2 data-protect/protection-groups).protectionGroups | Where-Object { $_.isDeleted -ne $true }
 
-$policies = (api get -v2 data-protect/policies).policies
-if ($policiesToUpdate) {
-    $policies = $policies | Where-Object name -in $policiesToUpdate
-    $jobs = $jobs | Where-Object { $_.policyId -in @($policies.id) }
+# Filter by job names if specified
+if ($jobsToUpdate.Count -gt 0) {
+    $allJobs = $allJobs | Where-Object { $_.name -in $jobsToUpdate }
 }
 
+# Filter by policies if specified
+if ($policiesToUpdate.Count -gt 0) {
+    $policies = (api get -v2 data-protect/policies).policies | Where-Object { $_.name -in $policiesToUpdate }
+    $policyIds = $policies.id
+    $allJobs = $allJobs | Where-Object { $_.policyId -in $policyIds }
+}
+
+# Filter out replicas if -includeReplicas not specified
+if (-not $includeReplicas) {
+    $allJobs = $allJobs | Where-Object { $_.isReplicationJob -ne $true }
+    Write-DebugLog "Replicas excluded from job list"
+} else {
+    Write-DebugLog "Including replica jobs as requested"
+}
+
+$jobs = $allJobs
 Write-DebugLog "Jobs retrieved and filtered: $($jobs.Count)"
 
 # -------------------------------------------------------------
@@ -218,19 +231,26 @@ foreach ($job in $jobs | Sort-Object -Property name) {
     $runs = (api get -v2 "data-protect/protection-groups/$($job.id)/runs?startTimeUsecs=$startTimeUsecs&endTimeUsecs=$endTimeUsecs&numRuns=9999&includeObjectDetails=false&runTypes=kSystem,kIncremental,kFull").runs
     Write-DebugLog "Retrieved $($runs.Count) runs for $($job.name)"
 
+    # Filter runs based on date and replica flag
     $latestRun = $runs |
         Where-Object {
             $runStartDate = (usecsToDate $_.localBackupInfo.startTimeUsecs).Date
-            $runEndDate = (usecsToDate $_.localBackupInfo.endTimeUsecs).Date
-            ($runStartDate -eq $lastDayPrevMonth.Date) -or
-            ($IncludeCrossMonth -and $runStartDate -lt $lastDayPrevMonth.Date -and $runEndDate -eq $lastDayPrevMonth.Date) -or
-            ($IncludeReverseCrossMonth -and $runStartDate -eq $lastDayPrevMonth.Date -and $runEndDate -gt $lastDayPrevMonth.Date)
+            $runEndDate   = (usecsToDate $_.localBackupInfo.endTimeUsecs).Date
+
+            # Include replicas if -includeReplicas is set
+            $replicaOk = $includeReplicas -or (-not $_.isReplicationRun)
+
+            $dateOk = ($runStartDate -eq $lastDayPrevMonth.Date) -or
+                      ($IncludeCrossMonth -and $runStartDate -lt $lastDayPrevMonth.Date -and $runEndDate -eq $lastDayPrevMonth.Date) -or
+                      ($IncludeReverseCrossMonth -and $runStartDate -eq $lastDayPrevMonth.Date -and $runEndDate -gt $lastDayPrevMonth.Date)
+
+            $replicaOk -and $dateOk
         } |
         Sort-Object { usecsToDate $_.localBackupInfo.startTimeUsecs } -Descending |
         Select-Object -First 1
 
     if (-not $latestRun) {
-        Write-DebugLog "No applicable run found for $($job.name)"
+        Write-DebugLog "No applicable run found for $($job.name) considering -includeReplicas=$includeReplicas"
         continue
     }
 
