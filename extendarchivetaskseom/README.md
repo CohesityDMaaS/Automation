@@ -34,7 +34,7 @@ Run these commands from PowerShell to download the script(s) into your current d
 # End Download Commands
 $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/extendarchivetaskseom'
 # Download the main script
-(Invoke-WebRequest -Uri "$repoURL/ExtendLastSnapShotOfMonth.ps1" -UseBasicParsing).Content | Out-File "extendarchivetaskseom.ps1"
+(Invoke-WebRequest -Uri "$repoURL/extendarchivetaskseom.ps1" -UseBasicParsing).Content | Out-File "extendarchivetaskseom.ps1"
 # Download the dependency (cohesity-api.ps1) in the same folder
 (Invoke-WebRequest -Uri "$repoURL/cohesity-api.ps1" -UseBasicParsing).Content | Out-File "cohesity-api.ps1"
 # End Download Commands
