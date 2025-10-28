@@ -26,6 +26,28 @@ This script calculates a new snapshot expiration date based on:
 
 Retention can be extended either **by months** (`-extendMonths`) or manually overridden with **days to keep** (`-daysToKeep`).  
 
+## Download the script
+
+Run these commands from PowerShell to download the script(s) into your current directory.
+
+```powershell
+# End Download Commands
+$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/extendarchivetaskseom'
+# Download the main script
+(Invoke-WebRequest -Uri "$repoURL/ExtendLastSnapShotOfMonth.ps1" -UseBasicParsing).Content | Out-File "extendarchivetaskseom.ps1"
+# Download the dependency (cohesity-api.ps1) in the same folder
+(Invoke-WebRequest -Uri "$repoURL/cohesity-api.ps1" -UseBasicParsing).Content | Out-File "cohesity-api.ps1"
+# End Download Commands
+```
+
+## Components
+
+* [ExtendLastSnapShotOfMonth.ps1](https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/ExtendLastSnapShotOfMonth/ExtendLastSnapShotOfMonth.ps1): the main powershell script
+* [cohesity-api.ps1](https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/ExtendLastSnapShotOfMonth/cohesity-api.ps1): the Cohesity REST API helper module
+
+Place both files in a folder together, and then we can run the script.
+
+
 Supports:  
 
 - Dry-run mode (`-DryRun`)  
