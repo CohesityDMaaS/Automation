@@ -42,8 +42,8 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/exte
 
 ## Components
 
-* [ExtendLastSnapShotOfMonth.ps1](https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/ExtendLastSnapShotOfMonth/ExtendLastSnapShotOfMonth.ps1): the main powershell script
-* [cohesity-api.ps1](https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/ExtendLastSnapShotOfMonth/cohesity-api.ps1): the Cohesity REST API helper module
+* [Extendarchivetaskseom.ps1]([https://github.com/CohesityDMaaS/Automation/blob/main/extendarchivetaskseom/extendarchivetaskseom.ps1]): the main powershell script
+* [cohesity-api.ps1](https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/extendarchivetaskseom/cohesity-api.ps1): the Cohesity REST API helper module
 
 Place both files in a folder together, and then we can run the script.
 
