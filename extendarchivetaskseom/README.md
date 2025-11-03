@@ -91,7 +91,9 @@ Supports:
 | `-EndDate` | End date for date range filter | No | DateTime |
 | `-includeSnapshotDay` | Include the snapshot day in retention calculation | No | Switch |
 | `-jobNames` | Array of job names to include | No | Array |
+| `-jobList` | Text file of job names (one per line) | No | Array |
 | `-policyNames` | Array of policy names to include | No | Array |
+| `-policyList` | Text file of policy names (one per line) | No | Array |
 | `-target` | Filter archival target vault name | No | String |
 | `-allowReduction` | Allow reducing retention if new expiry is earlier | No | Switch |
 | `-commit` | Commit changes to Cohesity | No | Switch |
