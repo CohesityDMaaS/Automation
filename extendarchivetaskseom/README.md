@@ -84,7 +84,8 @@ Supports:
 | `-username` | Admin username | Yes | String |
 | `-password` | Admin password (optional, will prompt if not supplied) | No | String |
 | `-noPrompt` | Do not prompt for password; useful for non-interactive runs if you supply the password or use API Key | No | Switch |
-| `-useApiKey` | Use API Key authentication instead of password | No | Switch |
+| `-useApiKey` or `-useApi` | Use API Key authentication instead of password | No | Switch |
+| `-ApiKey` | Explicit API Key. Use with conjunction with `-useApi` | No | String | 
 | `-emailMFACode` | One-Time MFA code for authentication (when required). | No | String |
 | `-mcm` | Use Helios/MCM (multi-cluster) authentication flow | No | String |
 | `-region` | Helios region ID for MCM scenarios | No | String |
