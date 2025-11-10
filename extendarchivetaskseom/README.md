@@ -83,6 +83,12 @@ Supports:
 | `-vip` | Cohesity cluster IP or hostname | Yes | String |
 | `-username` | Admin username | Yes | String |
 | `-password` | Admin password (optional, will prompt if not supplied) | No | String |
+| `-noPrompt` | Do not prompt for password; useful for non-interactive runs if you supply the password or use API Key | No | Switch |
+| `-useApiKey` | Use API Key authentication instead of password | No | Switch |
+| `-emailMFACode` | One-Time MFA code for authentication (when required). | No | String |
+| `-mcm` | Use Helios/MCM (multi-cluster) authentication flow | No | String |
+| `-region` | Helios region ID for MCM scenarios | No | String |
+| `-tenant` | Tenant context for multi-tenancy | No | String |
 | `-domain` | Domain for authentication (default: `local`) | No | String |
 | `-extendMonths` | Number of months to extend retention | No (required if `-daysToKeep` not used) | Int |
 | `-daysToKeep` | Manually specify retention in days | No (required if `-extendMonths` not used) | Int |
