@@ -29,6 +29,7 @@ param (
 
     [Parameter(Mandatory = $False)][int]$extendMonths,
     [Parameter(Mandatory = $False)][int]$daysToKeep,
+
     [Parameter(Mandatory = $False)][datetime]$snapshotDate,
     [Parameter(Mandatory = $False)][datetime]$StartDate,
     [Parameter(Mandatory = $False)][datetime]$EndDate,
@@ -36,7 +37,6 @@ param (
 
     # Password is used for password auth OR carries the API key for API-key auth
     [Parameter()][string]$password,
-
     [Parameter()][switch]$noPrompt,
 
     # Allow both -useApiKey and -useAPI
@@ -50,17 +50,24 @@ param (
     [Parameter()][switch]$mcm,
     [Parameter()][string]$region,
     [Parameter()][string]$tenant,
+
     [Parameter()][array]$jobNames,
     [Parameter()][array]$policyNames,
     [Parameter()][string]$jobList,
     [Parameter()][string]$policyList,
     [Parameter()][string]$target,
+
     [Parameter()][switch]$allowReduction,
+
+    # Action flags – exactly one required unless -showExpiration is used
     [Parameter()][switch]$commit,
     [Parameter()][switch]$DryRun,
+
     [Parameter()][string]$SummaryCsv,
+
     [Parameter()][switch]$lastSnapshotOfPreviousMonth,
     [Parameter()][switch]$lastSnapshotOfCurrentMonth,
+
     [Parameter(Mandatory = $False)][datetime]$showExpiration
 )
 
@@ -90,7 +97,6 @@ function Write-DebugLog {
     }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "[$timestamp][$Level] $Message"
-    # Write to log file
     try {
         Add-Content -Path $script:logFile -Value $logMessage -ErrorAction Stop
     } catch {
@@ -123,6 +129,53 @@ function Read-ListFromFile {
     }
 }
 
+function Clean-OldLogs {
+    param(
+        [Parameter(Mandatory = $true)][string]$LogFolder,
+        [string]$Pattern = 'extendlog_*.txt',
+        [int]$Keep = 10,
+        [string]$ExcludePath
+    )
+    try {
+        if (-not (Test-Path -LiteralPath $LogFolder)) {
+            return
+        }
+        $files = Get-ChildItem -LiteralPath $LogFolder -Filter $Pattern -File -ErrorAction SilentlyContinue |
+                 Sort-Object -Property LastWriteTime -Descending
+
+        if ($ExcludePath -and (Test-Path -LiteralPath $ExcludePath)) {
+            $excludeResolved = (Resolve-Path -LiteralPath $ExcludePath).Path
+            $files = $files | Where-Object { $_.FullName -ne $excludeResolved }
+        }
+
+        if ($null -eq $files -or $files.Count -le $Keep) {
+            Write-DebugLog "Log cleanup: nothing to delete. Found: $($files.Count), Keep: $Keep"
+            return
+        }
+
+        $toRemove = $files | Select-Object -Skip $Keep
+        foreach ($f in $toRemove) {
+            try {
+                Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop
+                Write-DebugLog "Deleted old log: $($f.FullName)"
+            } catch {
+                Write-DebugLog "Failed to delete old log $($f.FullName): $_" "WARN"
+                Write-Warning "Failed to delete old log $($f.FullName): $_"
+            }
+        }
+
+        Write-DebugLog "Log cleanup complete. Removed $($toRemove.Count) file(s)."
+    } catch {
+        Write-DebugLog "Log cleanup error: $_" "WARN"
+        Write-Warning "Log cleanup error: $_"
+    }
+}
+
+# Perform log cleanup now (keep latest 10 logs), exclude the current one
+if ($scriptPath) {
+    Clean-OldLogs -LogFolder $scriptPath -Pattern 'extendlog_*.txt' -Keep 10 -ExcludePath $logFile
+}
+
 # Log script start
 Write-DebugLog "========================================" "INFO"
 Write-DebugLog "Script started" "INFO"
@@ -142,6 +195,7 @@ Write-DebugLog "DryRun: $DryRun, Commit: $commit" "INFO"
 Write-DebugLog "========================================" "INFO"
 Write-Host ""
 
+# Merge job/policy lists from files if provided
 if ($jobList) {
     $fileJobNames = Read-ListFromFile -FilePath $jobList -ListType "job names"
     if ($fileJobNames) {
@@ -153,7 +207,6 @@ if ($jobList) {
         }
     }
 }
-
 if ($policyList) {
     $filePolicyNames = Read-ListFromFile -FilePath $policyList -ListType "policy names"
     if ($filePolicyNames) {
@@ -165,7 +218,6 @@ if ($policyList) {
         }
     }
 }
-
 if ($jobNames) {
     Write-Host "Filtering by jobs: $($jobNames -join ', ')" -ForegroundColor Cyan
     Write-DebugLog "Job filter active: $($jobNames -join ', ')"
@@ -175,7 +227,19 @@ if ($policyNames) {
     Write-DebugLog "Policy filter active: $($policyNames -join ', ')"
 }
 
-# Validate parameters - skip validation if showExpiration is used
+# -------------------- Parameter Validation --------------------
+# Require exactly one of -DryRun or -commit unless -showExpiration is used
+if (-not $showExpiration) {
+    $hasDryRun = $PSBoundParameters.ContainsKey('DryRun')
+    $hasCommit = $PSBoundParameters.ContainsKey('commit')
+    if (-not ($hasDryRun -xor $hasCommit)) {
+        Write-Host "ERROR: You must specify exactly one of -DryRun or -commit." -ForegroundColor Red
+        Write-DebugLog "Parameter validation failed: Must specify exactly one of -DryRun or -commit" "ERROR"
+        exit 1
+    }
+}
+
+# Validate -daysToKeep vs -extendMonths unless lastSnapshot flags used, or showExpiration mode
 if (-not $showExpiration) {
     if (-not ($lastSnapshotOfPreviousMonth -or $lastSnapshotOfCurrentMonth) -and
         (($PSBoundParameters.ContainsKey('daysToKeep') -and $PSBoundParameters.ContainsKey('extendMonths')) -or
@@ -185,6 +249,7 @@ if (-not $showExpiration) {
         exit 1
     }
 }
+# -------------------------------------------------------------
 
 # --------------- Auth input handling (API key alias and prompting) ---------------
 # Normalize and validate auth inputs prior to calling apiauth
@@ -210,10 +275,8 @@ if ($useApiKey) {
             exit 1
         }
     }
-
     # Map API key into -password variable used by apiauth
     $password = $ApiKey
-
     # Optional: clear ApiKey variable after mapping for safety
     $ApiKey = $null
 } else {
@@ -223,7 +286,6 @@ if ($useApiKey) {
         Write-DebugLog "ApiKey provided without -useApiKey." "ERROR"
         exit 1
     }
-
     # If password is required and not provided, prompt unless -noPrompt
     if ([string]::IsNullOrWhiteSpace($password) -and -not $noPrompt) {
         $secure = Read-Host -AsSecureString "Enter Password"
@@ -240,6 +302,16 @@ if ($useApiKey) {
 
 . $(Join-Path -Path $scriptPath -ChildPath cohesity-api.ps1)
 Write-DebugLog "Loaded cohesity-api.ps1"
+
+# Indicate action mode early
+if ($showExpiration) {
+    Write-Host "Mode: Show Expiration" -ForegroundColor Cyan
+} elseif ($DryRun) {
+    Write-Host "Mode: Dry Run (no changes will be committed)" -ForegroundColor Yellow
+} elseif ($commit) {
+    Write-Host "Mode: Commit (changes will be applied)" -ForegroundColor Green
+}
+
 Write-Host "Connecting to Cohesity cluster $vip..."
 if ($useApiKey) {
     Write-Host "Using API Key authentication..." -ForegroundColor Cyan
@@ -297,7 +369,6 @@ if ($showExpiration) {
     foreach ($job in $jobs | Sort-Object -Property name) {
         Write-DebugLog "Processing job: $($job.name)"
         $policy = $policies | Where-Object { $_.id -eq $job.policyId }
-
         if (!$policyNames -or ($policy -and $policy.name -in $policyNames)) {
             $jobName = $job.name
             if (!$jobNames -or $job.name -in $jobNames) {
@@ -306,7 +377,6 @@ if ($showExpiration) {
                 $allRuns = api get $apiUrl
                 $runs = $allRuns | Where-Object { 'kArchival' -in $_.copyRun.target.type }
                 Write-DebugLog ("Found {0} archival runs for job $jobName" -f $runs.Count)
-
                 foreach ($run in $runs) {
                     $localCopy = $run.copyRun | Where-Object { $_.target.type -eq 'kLocal' }
                     if ($localCopy) {
@@ -340,11 +410,9 @@ if ($showExpiration) {
         Write-Host "Found $($expirationList.Count) snapshot(s) expiring on $($showExpiration.ToString('yyyy-MM-dd')):" -ForegroundColor Green
         Write-Host ""
         Write-DebugLog "Total snapshots found: $($expirationList.Count)"
-
         $header = "{0,-30} {1,-20} {2,-15} {3,-15} {4,-20}" -f "JobName","PolicyName","SnapshotDate","ExpiryDate","VaultName"
         Write-Host $header -ForegroundColor Cyan
         Write-Host ("-" * 100) -ForegroundColor Cyan
-
         foreach ($item in $expirationList | Sort-Object -Property JobName, SnapshotDate) {
             Write-Host ("{0,-30} {1,-20} {2,-15} {3,-15} {4,-20}" -f `
                 $item.JobName, `
@@ -352,14 +420,11 @@ if ($showExpiration) {
                 $item.SnapshotDate.ToString('yyyy-MM-dd'), `
                 $item.ExpirationDate.ToString('yyyy-MM-dd'), `
                 $item.VaultName) -ForegroundColor White
-
             Write-DebugLog ("Result: Job=$($item.JobName), Policy=$($item.PolicyName), Snapshot=$($item.SnapshotDate.ToString('yyyy-MM-dd')), Expiry=$($item.ExpirationDate.ToString('yyyy-MM-dd')), Vault=$($item.VaultName)")
         }
-
         Write-Host ("=" * 100) -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Total snapshots found: $($expirationList.Count)" -ForegroundColor Green
-
         # Export to CSV if specified
         if ($SummaryCsv) {
             $expirationList | Export-Csv -Path $SummaryCsv -NoTypeInformation -Force
@@ -373,13 +438,10 @@ if ($showExpiration) {
 
     Write-DebugLog "Expiration search completed"
     Write-DebugLog "========================================" "INFO"
-
     if ($logFile) {
         Write-Host ""
         Write-Host "Debug log saved to: $logFile" -ForegroundColor Cyan
     }
-
-    # Exit after displaying expiration information
     exit 0
 }
 
@@ -398,7 +460,6 @@ foreach ($job in $jobs | Sort-Object -Property name) {
         if (!$jobNames -or $job.name -in $jobNames) {
             Write-Host "$jobName"
             Write-DebugLog "Fetching archival runs for job $jobName..."
-
             $apiUrl = "protectionRuns?jobId=$($job.id)&excludeTasks=true&excludeNonRestoreableRuns=true&numRuns=999999&runTypes=kRegular"
             $allRuns = api get $apiUrl
             $runs = $allRuns | Where-Object { 'kArchival' -in $_.copyRun.target.type }
@@ -413,7 +474,6 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                 }
             }
             $runs = $sortedRuns | Sort-Object -Property SortKey | ForEach-Object { $_.Run }
-
             Write-DebugLog ("Found {0} archival runs" -f $runs.Count)
 
             if ($snapshotDate) {
@@ -436,6 +496,7 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                 $month = if ($lastSnapshotOfPreviousMonth) { (Get-Date).AddMonths(-1) } else { Get-Date }
                 $monthStart = Get-Date -Year $month.Year -Month $month.Month -Day 1
                 $monthEnd   = $monthStart.AddMonths(1).AddDays(-1)
+
                 $monthRuns = $runs | Where-Object {
                     $localCopy = $_.copyRun | Where-Object { $_.target.type -eq 'kLocal' }
                     $runStart = (usecsToDate $localCopy.runStartTimeUsecs).Date
@@ -447,6 +508,7 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                         ($runStart -ge $monthStart) -and ($runEnd -le $monthEnd)
                     }
                 }
+
                 $monthName = if ($lastSnapshotOfPreviousMonth) { "previous" } else { "current" }
                 Write-DebugLog ("Found {0} runs in {1} month" -f $monthRuns.Count, $monthName)
 
@@ -463,7 +525,6 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                     }
                     $sortedMonthRuns = $sortedMonthRuns | Sort-Object -Property EndDate -Descending
                     $runs = $sortedMonthRuns | Select-Object -First 1 | ForEach-Object { $_.Run }
-
                     $localCopy = $runs.copyRun | Where-Object { $_.target.type -eq 'kLocal' }
                     $refDate = (usecsToDate $localCopy.endTimeUsecs).Date
                     Write-Host "Reference snapshot (last of $monthName month, using end date): $($refDate.ToString('yyyy-MM-dd'))"
@@ -522,7 +583,6 @@ foreach ($job in $jobs | Sort-Object -Property name) {
                         $newExpireTimeUsecs = $startTimeUsecs + ($daysToKeep * $usecsPerDay)
                         $currentExpireTimeUsecs = $copyRun.expiryTimeUsecs
                         $daysToExtend = [int64][math]::Round(($newExpireTimeUsecs - $currentExpireTimeUsecs) / $usecsPerDay)
-
                         Write-DebugLog ("Current expiry: {0}, new expiry: {1}, days to extend: {2}" -f (usecsToDate $currentExpireTimeUsecs), (usecsToDate $newExpireTimeUsecs), $daysToExtend)
 
                         if (!($daysToExtend -lt 0) -or $allowReduction) {
@@ -596,7 +656,6 @@ if ($DryRun) {
 
 Write-DebugLog "========================================" "INFO"
 Write-DebugLog "Script completed successfully" "INFO"
-
 if ($logFile) {
     Write-Host ""
     Write-Host "Debug log saved to: $logFile" -ForegroundColor Cyan
