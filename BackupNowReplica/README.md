@@ -23,14 +23,19 @@ This script automates the execution of Cohesity protection groups (backup jobs) 
 - **Permissions**: Appropriate Cohesity cluster access rights
 - **Network**: Connectivity to Cohesity cluster or Helios
 
-## Installation
+## Download the script
 
-1. Clone or download this repository
-2. Ensure `cohesity-api.ps1` is in the same directory as this script
-3. Verify PowerShell execution policy allows script execution:
-   ```powershell
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   ```
+Run these commands from PowerShell to download the script(s) into your current directory.
+
+```powershell
+# End Download Commands
+$repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/BackupNowReplica'
+# Download the main script
+(Invoke-WebRequest -Uri "$repoURL/BackupNowReplica.ps1" -UseBasicParsing).Content | Out-File "BackupNowReplica.ps1"
+# Download the dependency (cohesity-api.ps1) in the same folder
+(Invoke-WebRequest -Uri "$repoURL/cohesity-api.ps1" -UseBasicParsing).Content | Out-File "cohesity-api.ps1"
+# End Download Commands
+```
 
 ## Usage
 
