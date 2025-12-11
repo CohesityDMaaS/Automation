@@ -62,6 +62,13 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/Back
 .\BackupNowReplica.ps1 -vip mycluster.company.com -username user@domain.com -EntraId -Commit
 ```
 
+### Dry-Run Mode
+
+Preview what would happen without executing jobs:
+```powershell
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -JobName "Critical-DB" -DryRun
+```
+
 ### Job Selection Examples
 
 **Run a single job:**
@@ -78,14 +85,6 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/Back
 ```powershell
 .\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -Commit
 ```
-
-### Dry-Run Mode
-
-Preview what would happen without executing jobs:
-```powershell
-.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -JobName "Critical-DB" -DryRun
-```
-
 ### Custom Retention Period
 
 Set replication retention to end-of-month plus 6 months:
