@@ -1,6 +1,6 @@
-# Cohesity Protection Group Runner
+# Cohesity Replication Run End of Month Retention Script
 
-A PowerShell script to manage and execute Cohesity protection group backups with customizable replication retention settings.
+A PowerShell script to manage and execute Cohesity protection group backups with customizable replication retention settings that are stored at the End of the Month.
 
 ## Overview
 
