@@ -42,66 +42,66 @@ $repoURL = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/Back
 ### Basic Syntax
 
 ```powershell
-.\script.ps1 -vip <cluster> -username <user> [-Commit|-DryRun] [options]
+.\BackupNowReplica.ps1 -vip <cluster> -username <user> [-Commit|-DryRun] [options]
 ```
 
 ### Authentication Examples
 
 **Local Authentication:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -domain local -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -domain local -Commit
 ```
 
 **Helios Authentication:**
 ```powershell
-.\script.ps1 -username admin@company.com -useApiKey -mcm -clusterName "Production-Cluster" -Commit
+.\BackupNowReplica.ps1 -username admin@company.com -useApiKey -mcm -clusterName "Production-Cluster" -Commit
 ```
 
 **Entra ID Authentication:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username user@domain.com -EntraId -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username user@domain.com -EntraId -Commit
 ```
 
 ### Job Selection Examples
 
 **Run a single job:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -JobName "SQL-Backup-Daily" -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -JobName "SQL-Backup-Daily" -Commit
 ```
 
 **Run multiple jobs from a file:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -JobList "C:\jobs\backup-list.txt" -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -JobList "C:\jobs\backup-list.txt" -Commit
 ```
 
 **Process all active jobs:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -Commit
 ```
 
 ### Dry-Run Mode
 
 Preview what would happen without executing jobs:
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -JobName "Critical-DB" -DryRun
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -JobName "Critical-DB" -DryRun
 ```
 
 ### Custom Retention Period
 
 Set replication retention to end-of-month plus 6 months:
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -keepReplicaForMonths 6 -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -keepReplicaForMonths 6 -Commit
 ```
 
 ### Enable Logging
 
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -WriteLog -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -WriteLog -Commit
 ```
 
 **With custom log path:**
 ```powershell
-.\script.ps1 -vip mycluster.company.com -username admin -WriteLog -LogPath "C:\Logs\cohesity-backup.log" -Commit
+.\BackupNowReplica.ps1 -vip mycluster.company.com -username admin -WriteLog -LogPath "C:\Logs\cohesity-backup.log" -Commit
 ```
 
 ## Parameters
@@ -270,6 +270,4 @@ For issues related to:
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: 2025-12-10  
-**Compatibility**: Cohesity v6.x and higher
+
