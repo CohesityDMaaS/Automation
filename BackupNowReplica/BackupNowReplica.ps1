@@ -109,35 +109,43 @@ if (-not $cohesity_api.authorized) {
 # -------------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------------
-function Get-DaysToEndOfMonthPlusMonths {
+function Get-DaysToEndOfMonthPlusMonthsUtc {
     param(
         [int]$monthsAhead
     )
 
-    $today  = (Get-Date).Date
-    $target = $today.AddMonths($monthsAhead)
+    # Work in UTC and at midnight (date only)
+    $todayUtc = [DateTime]::UtcNow.Date   # e.g. 2025-12-11 00:00:00Z
+    $target   = $todayUtc.AddMonths($monthsAhead)
 
-    # True end-of-month
+    # Compute the true end-of-month date in UTC
     $lastDay = [DateTime]::DaysInMonth($target.Year, $target.Month)
-    $eomDate = Get-Date -Year $target.Year -Month $target.Month -Day $lastDay
 
-    $diffDays = ($eomDate - $today).Days   # exact days to EOM
+    # Construct EOM explicitly as a UTC DateTime
+    $eomDateUtc = New-Object System.DateTime(
+        $target.Year,
+        $target.Month,
+        $lastDay,
+        0, 0, 0,
+        [DateTimeKind]::Utc
+    )
 
-    # Bias down by 1 day to avoid any chance of spilling into next day
-    $days = [int]$diffDays - 1
+    # Exact whole-day difference from today to EOM (UTC)
+    $diffDays = ($eomDateUtc - $todayUtc).Days
+
+    # Safety clamp: never less than 1 day
+    $days = [int]$diffDays
     if ($days -lt 1) { $days = 1 }
 
-    # Debug/info
-    Write-Host ("Today:            {0}" -f $today.ToString('yyyy-MM-dd'))
-    Write-Host ("Target EOM:       {0}" -f $eomDate.ToString('yyyy-MM-dd'))
-    Write-Host ("raw daysToEOM:    {0}" -f $diffDays)
-    
+    Write-Host ("Today (UTC):         {0}" -f $todayUtc.ToString('yyyy-MM-dd'))
+    Write-Host ("Target EOM (UTC):    {0}" -f $eomDateUtc.ToString('yyyy-MM-dd'))
+    Write-Host ("raw daysToEOM (UTC): {0}" -f $diffDays)
+
     return $days
 }
-
 # Use the new parameter here instead of hard-coded 4
-$keepReplicaForDays = Get-DaysToEndOfMonthPlusMonths -monthsAhead $keepReplicaForMonths
-#Write-Host ("Replica retention (daysToKeep) sent to Cohesity: {0}" -f $keepReplicaForDays)
+$keepReplicaForDays = Get-DaysToEndOfMonthPlusMonthsUtc -monthsAhead $keepReplicaForMonths
+
 
 # Finished states (both numeric and named)
 $finishedStates = @(
