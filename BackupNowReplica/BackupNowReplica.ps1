@@ -110,37 +110,23 @@ if (-not $cohesity_api.authorized) {
 # Helpers
 # -------------------------------------------------------------------------
 function Get-DaysToEndOfMonthPlusMonthsUtc {
-    param(
-        [int]$monthsAhead
-    )
+    param([int]$monthsAhead)
 
-    # Work in UTC and at midnight (date only)
-    $todayUtc = [DateTime]::UtcNow.Date   # e.g. 2025-12-11 00:00:00Z
-    $target   = $todayUtc.AddMonths($monthsAhead)
+    # Work in LOCAL time and floor to the last calendar day of the target month
+    $nowLocal  = Get-Date
+    $target    = $nowLocal.AddMonths($monthsAhead)
+    $lastDay   = [DateTime]::DaysInMonth($target.Year, $target.Month)
+    $eomLocalD = Get-Date -Year $target.Year -Month $target.Month -Day $lastDay
 
-    # Compute the true end-of-month date in UTC
-    $lastDay = [DateTime]::DaysInMonth($target.Year, $target.Month)
+    # Whole calendar days between today's date and EOM date (floor)
+    $days = [int]($eomLocalD.Date - $nowLocal.Date).TotalDays
 
-    # Construct EOM explicitly as a UTC DateTime
-    $eomDateUtc = New-Object System.DateTime(
-        $target.Year,
-        $target.Month,
-        $lastDay,
-        0, 0, 0,
-        [DateTimeKind]::Utc
-    )
-
-    # Exact whole-day difference from today to EOM (UTC)
-    $diffDays = ($eomDateUtc - $todayUtc).Days
-
-    # Safety clamp: never less than 1 day
-    $days = [int]$diffDays
+    # Safety clamp
     if ($days -lt 1) { $days = 1 }
 
-    Write-Host ("Today (UTC):         {0}" -f $todayUtc.ToString('yyyy-MM-dd'))
-    Write-Host ("Target EOM (UTC):    {0}" -f $eomDateUtc.ToString('yyyy-MM-dd'))
-    Write-Host ("raw daysToEOM (UTC): {0}" -f $diffDays)
-
+    Write-Host ("Today (local):      {0}" -f $nowLocal.ToString('yyyy-MM-dd'))
+    Write-Host ("Target EOM (local): {0}" -f $eomLocalD.ToString('yyyy-MM-dd'))
+    Write-Host ("daysToEOM (floor):  {0}" -f $days)
     return $days
 }
 # Use the new parameter here instead of hard-coded 4
@@ -510,3 +496,4 @@ Write-Host "All requested jobs processed."
 # Stop transcript if it was started
 # -------------------------------------------------------------------------
 Stop-Log
+
