@@ -1,4 +1,4 @@
-[CmdletBinding(PositionalBinding=$False)]
+[CmdletBinding(PositionalBinding = $False)]
 param(
     [Parameter()][string]$vip = 'helios.cohesity.com',
     [Parameter()][string]$username = 'helios',
@@ -9,10 +9,9 @@ param(
     [Parameter()][switch]$EntraId,
     [Parameter()][string]$clusterName = $null,
 
-    # Wait/progress behavior
-    
-	#[Parameter()][switch]$wait,
-    #[Parameter()][switch]$progress,
+    # Wait/progress behavior (were commented in your snippet, but referenced later)
+    [Parameter()][switch]$wait,
+    [Parameter()][switch]$progress,
 
     # Tuning
     [Parameter()][int]$timeoutSec = 300,
@@ -31,11 +30,16 @@ param(
     [Parameter()][switch]$DryRun,      # show expiration, do not start jobs
     [Parameter()][switch]$Commit,      # actually start jobs
 
+    # NEW: Paused job handling
+    [Parameter()][switch]$RunPausedJobs,          # allow processing paused jobs (otherwise skip)
+    [Parameter()][switch]$UnpausePausedJobs,      # if paused, temporarily unpause to run (best-effort)
+    [Parameter()][switch]$RePauseAfterRun,        # if we unpause, re-pause after run submission
+
     # Logging controls
     [Parameter()][switch]$WriteLog,    # enable console output to file
     [Parameter()][string]$LogPath = $null,  # optional custom log path
 
-    # NEW: Months to keep replica for
+    # Months to keep replica for
     [Parameter()][int]$keepReplicaForMonths = 4
 )
 
@@ -46,10 +50,10 @@ $script:TranscriptStarted = $false
 
 function Stop-Log {
     if ($script:TranscriptStarted) {
-        try { 
-            Stop-Transcript | Out-Null 
+        try {
+            Stop-Transcript | Out-Null
         } catch {
-            # Silently ignore if transcript wasn't started
+            # ignore
         }
         $script:TranscriptStarted = $false
     }
@@ -84,6 +88,11 @@ if ($DryRun -and $Commit) {
 if (-not $DryRun -and -not $Commit) {
     Write-Host "INFO: Neither -DryRun nor -Commit specified. Defaulting to DryRun behavior (no jobs will be started)." -ForegroundColor Yellow
     $DryRun = $true
+}
+
+# Default RePauseAfterRun to true if user asked to unpause but didn't specify repause
+if ($UnpausePausedJobs -and -not $PSBoundParameters.ContainsKey('RePauseAfterRun')) {
+    $RePauseAfterRun = $true
 }
 
 # cache setting used in URL
@@ -129,9 +138,48 @@ function Get-DaysToEndOfMonthPlusMonthsUtc {
     Write-Host ("daysToEOM (floor):  {0}" -f $days)
     return $days
 }
+
+function Test-JobPaused {
+    param([object]$job)
+
+    # Cohesity object shapes can differ; check several likely property names
+    foreach ($p in @('isPaused','paused','isOnHold','onHold')) {
+        if ($job -and $job.PSObject.Properties.Name -contains $p) {
+            return [bool]$job.$p
+        }
+    }
+    return $false
+}
+
+function Try-UnpauseJob {
+    param(
+        [string]$v1JobId,
+        [int]$timeoutSec
+    )
+    try {
+        # Common v1 endpoints
+        $null = api post ("protectionJobs/unpause/$v1JobId") @{} -timeout $timeoutSec -quiet
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Try-PauseJob {
+    param(
+        [string]$v1JobId,
+        [int]$timeoutSec
+    )
+    try {
+        $null = api post ("protectionJobs/pause/$v1JobId") @{} -timeout $timeoutSec -quiet
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 # Use the new parameter here instead of hard-coded 4
 $keepReplicaForDays = Get-DaysToEndOfMonthPlusMonthsUtc -monthsAhead $keepReplicaForMonths
-
 
 # Finished states (both numeric and named)
 $finishedStates = @(
@@ -145,12 +193,32 @@ $finishedStates = @(
 # -------------------------------------------------------------------------
 $jobs = api get -v2 "data-protect/protection-groups?isActive=true&isDeleted=false&pruneSourceIds=true&pruneExcludedSourceIds=true&useCachedData=$cacheSetting" -timeout $timeoutSec
 $allActiveJobs = @($jobs.protectionGroups)
+
 if ($allActiveJobs.Count -eq 0) {
     Write-Host "No active protection groups found." -ForegroundColor Yellow
     Stop-Log
     exit 0
 }
-Write-Host ("Found {0} active protection groups" -f $allActiveJobs.Count)
+
+# -------------------------------------------------------------------------
+# NEW: Correct Active vs Paused counting for the "Found X Active and Y Paused" message
+#   - "Active" in this message means: active AND not paused
+#   - "Paused" means: active AND paused
+#   This matches your later behavior: paused jobs are skipped unless -RunPausedJobs is specified.
+# -------------------------------------------------------------------------
+[int]$pausedCount = 0
+[int]$activeNotPausedCount = 0
+
+foreach ($j in $allActiveJobs) {
+    if (Test-JobPaused -job $j) {
+        $pausedCount++
+    } else {
+        $activeNotPausedCount++
+    }
+}
+
+Write-Host ("Found {0} Active protection group(s) and {1} Paused protection group(s)" -f `
+    $activeNotPausedCount, $pausedCount)
 
 # -------------------------------------------------------------------------
 # Build requested job set from -JobName / -JobList
@@ -176,19 +244,16 @@ $requestedJobNames = $requestedJobNames |
     Sort-Object -Unique
 
 if ($requestedJobNames.Count -eq 0) {
-    # No filters: process all active jobs (existing behavior)
+    # No filters: process all active jobs
     $jobsToProcess = $allActiveJobs
-    Write-Host "No JobName/JobList specified. Processing ALL active jobs."
+    Write-Host "No JobName/JobList specified. Processing ALL active jobs (paused jobs will be skipped unless -RunPausedJobs is specified)."
+
 } else {
     # Filter to only requested job names (exact match)
-    $jobsToProcess = $allActiveJobs | Where-Object {
-        $requestedJobNames -contains $_.name
-    }
+    $jobsToProcess = $allActiveJobs | Where-Object { $requestedJobNames -contains $_.name }
 
     # Warn about any requested names that don't match an active job
-    $notFound = $requestedJobNames | Where-Object {
-        -not ($allActiveJobs.name -contains $_)
-    }
+    $notFound = $requestedJobNames | Where-Object { -not ($allActiveJobs.name -contains $_) }
     if ($notFound.Count -gt 0) {
         Write-Host ("The following requested jobs were not found or not active: {0}" -f ($notFound -join ', ')) -ForegroundColor Yellow
     }
@@ -214,6 +279,15 @@ foreach ($job in $jobsToProcess) {
 
     Write-Host ""
     Write-Host ("=== Processing: {0} ===" -f $jobName)
+
+    # ---------------------------------------------------------------------
+    # Skip paused jobs unless explicitly allowed
+    # ---------------------------------------------------------------------
+    $isPaused = Test-JobPaused -job $job
+    if ($isPaused -and -not $RunPausedJobs) {
+        Write-Host ("Skipping paused job (use -RunPausedJobs to include): {0}" -f $jobName) -ForegroundColor Yellow
+        continue
+    }
 
     # ---------------------------------------------------------------------
     # Build copyRunTargets from policy, override daysToKeep for replication
@@ -262,15 +336,14 @@ foreach ($job in $jobsToProcess) {
     # DryRun/Commit: report calculated expiration date(s) for replication
     # ---------------------------------------------------------------------
     if ($copyRunTargets.Count -gt 0) {
-        $today      = (Get-Date).Date
+        $today = (Get-Date).Date
 
         # Recompute the same Target EOM that Get-DaysToEndOfMonthPlusMonths uses
-        $monthsAhead = $keepReplicaForMonths   # <-- driven by parameter
+        $monthsAhead = $keepReplicaForMonths
         $target      = $today.AddMonths($monthsAhead)
         $lastDay     = [DateTime]::DaysInMonth($target.Year, $target.Month)
         $eomDate     = Get-Date -Year $target.Year -Month $target.Month -Day $lastDay
 
-        # daysToKeep is already calculated from today → EOM
         $expireDate = $eomDate
 
         Write-Host ("If a replication run starts today ({0}), expiration (Target EOM) would be: {1}" -f `
@@ -309,21 +382,52 @@ foreach ($job in $jobsToProcess) {
 
     if ($DryRun) {
         Write-Host ("DryRun: NOT starting job {0}. Use -Commit to actually run with these settings." -f $jobName) -ForegroundColor Yellow
-        # skip wait/progress for DryRun
         continue
     }
 
-    # Only executed if Commit is true
+    # If job is paused and user wants to run it, optionally unpause first
+    $weUnpaused = $false
+    if ($isPaused -and $RunPausedJobs -and $UnpausePausedJobs) {
+        Write-Host ("Job is paused; attempting temporary unpause: {0}" -f $jobName) -ForegroundColor Cyan
+        if (Try-UnpauseJob -v1JobId $v1JobId -timeoutSec $timeoutSec) {
+            $weUnpaused = $true
+            Write-Host ("Unpaused: {0}" -f $jobName) -ForegroundColor Cyan
+        } else {
+            Write-Host ("WARNING: Failed to unpause job via API. Will still attempt run-now: {0}" -f $jobName) -ForegroundColor Yellow
+        }
+    }
+
+    # Actually start the run
     $result = api post ("protectionJobs/run/$v1JobId") $jobdata -timeout $timeoutSec -quiet
+    $startOk = $false
+
     if ($result -eq "") {
         Write-Host ("Started: {0}" -f $jobName)
+        $startOk = $true
     } else {
         $err = $cohesity_api.last_api_error
         if ($err -match "outstanding run-now request|already has a run|existing active backup run|only have one active backup run") {
             Write-Host ("Job already running: {0}" -f $jobName)
+            $startOk = $true
+        } elseif ($isPaused -and -not $UnpausePausedJobs -and $RunPausedJobs) {
+            Write-Host ("Start error (job may be paused; consider -UnpausePausedJobs): {0}" -f $err) -ForegroundColor Yellow
         } else {
             Write-Host ("Start error: {0}" -f $err) -ForegroundColor Yellow
-            continue
+        }
+
+        # If start failed, and we unpaused it, attempt to re-pause before continuing
+        if (-not $startOk -and $weUnpaused -and $RePauseAfterRun) {
+            Write-Host ("Re-pausing job after failed run submission: {0}" -f $jobName) -ForegroundColor Cyan
+            $null = Try-PauseJob -v1JobId $v1JobId -timeoutSec $timeoutSec
+        }
+        if (-not $startOk) { continue }
+    }
+
+    # Re-pause if we temporarily unpaused it (after run submission)
+    if ($weUnpaused -and $RePauseAfterRun) {
+        Write-Host ("Re-pausing job after run submission: {0}" -f $jobName) -ForegroundColor Cyan
+        if (-not (Try-PauseJob -v1JobId $v1JobId -timeoutSec $timeoutSec)) {
+            Write-Host ("WARNING: Failed to re-pause job: {0}" -f $jobName) -ForegroundColor Yellow
         }
     }
 
@@ -368,7 +472,7 @@ foreach ($job in $jobsToProcess) {
     $deadline = (Get-Date).AddMinutes($waitForNewRunMinutes)
 
     while ($newRunId -le $lastRunId) {
-       if ((Get-Date) -gt $deadline) {
+        if ((Get-Date) -gt $deadline) {
             Write-Host "Timed out waiting for new run to appear" -ForegroundColor Yellow
             break
         }
@@ -433,7 +537,7 @@ foreach ($job in $jobsToProcess) {
                             $firstGroup = $pm.resultGroupVec[0]
                             if ($firstGroup.taskVec -and $firstGroup.taskVec.Count -gt 0) {
                                 $pct = $firstGroup.taskVec[0].progress.percentFinished
-                                $pct = [math]::Round($pct,0)
+                                $pct = [math]::Round($pct, 0)
                                 if ($pct -ne $lastProgressPct) {
                                     Write-Host ("{0} percent complete" -f $pct)
                                     $lastProgressPct = $pct
@@ -464,8 +568,8 @@ foreach ($job in $jobsToProcess) {
     # ---------------------------------------------------------------------
     # Normalize and report final status
     # ---------------------------------------------------------------------
-    $statusMap = @('0','1','2','Canceled','Succeeded','Failed','SucceededWithWarning')
-    if ($backupInfo -and $backupInfo.status -in @('3','4','5','6')) {
+    $statusMap = @('0', '1', '2', 'Canceled', 'Succeeded', 'Failed', 'SucceededWithWarning')
+    if ($backupInfo -and $backupInfo.status -in @('3', '4', '5', '6')) {
         $backupInfo.status = $statusMap[[int]$backupInfo.status]
     }
 
@@ -493,7 +597,6 @@ Write-Host ""
 Write-Host "All requested jobs processed."
 
 # -------------------------------------------------------------------------
-# Stop transcript if it was started
+# Stop the transcript if it was started
 # -------------------------------------------------------------------------
 Stop-Log
-
