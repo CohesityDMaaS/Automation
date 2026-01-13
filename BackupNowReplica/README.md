@@ -124,6 +124,9 @@ Set replication retention to end-of-month plus 6 months:
 |-----------|------|---------|-------------|
 | `-JobName` | String | - | Single job name to execute |
 | `-JobList` | String | - | Path to text file with job names (one per line) |
+| `-RunPausedJobs` | Switch | - | Allow processing paused jobs (otherwise skip) |
+| `-UnpausePausedJobs` | Swtich | - | If Paused, Temporarily unpause to run (best-effort) |
+| `-RePauseAfterRun` | Switch | - | If UnPaused, Re-Pause after run submission
 
 ### Behavior Control Parameters
 
