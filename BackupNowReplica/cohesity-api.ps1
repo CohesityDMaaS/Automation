@@ -1,17 +1,8 @@
 # . . . . . . . . . . . . . . . . . . .
 #  PowerShell Module for Cohesity API
-#  Version 2025.09.03 - Brian Seltzer
+#  Version 2026.05.13 - Brian Seltzer
 # . . . . . . . . . . . . . . . . . . .
 #
-# 2024-02-18 - fix - toJson function - handle null input
-# 2024-02-28 - added support for helios.gov
-# 2024-02-29 - added dateToString function
-# 2024-05-02 - added quiet switch to fileDownload function
-# 2024-05-17 - added support for EntraID (Open ID) authentication
-# 2024-06-24 - fixed authentication error for SaaS connectors
-# 2024-09-20 - allow posts to read-only helios cluster (for advanced queries)
-# 2024-10-14 - fixed date formatting
-# 2024-12-31 - added 'heliosCluster -' to remove access cluster ID
 # 2025-01-10 - added Get-Runs function
 # 2025-01-30 - added apiauth skipForcePasswordChange option
 # 2025-01-31 - fixed legacy session-id auth
@@ -27,10 +18,19 @@
 # 2025-06-30 - added report cohesity-api version to log
 # 2025-07-15 - fixed reported error issue
 # 2025-09-03 - added support for orgs in Helios
+# 2025-11-13 - fixed CCS region bug
+# 2025-11-19 - fixed CCS region bug #2
+# 2025-11-20 - fix header functions
+# 2026-02-01 - added enableCohesityAPIDebugger function (cohesity-har-file.txt output)
+# 2026-02-03 - added pauseCohesityAPIDebugger and resumeCohesityAPIDebugger functions
+# 2026-03-25 - fixed support for orgs in Helios
+# 2026-05-04 - bug hunt - various minor fixes
+# 2026-05-05 - updated api error logging
+# 2026-05-13 - reordered auth attempts
 #
 # . . . . . . . . . . . . . . . . . . .
 
-$versionCohesityAPI = '2025.09.03'
+$versionCohesityAPI = '2026.05.13'
 $heliosEndpoints = @('helios.cohesity.com', 'helios.gov-cohesity.com')
 
 # state cache
@@ -55,6 +55,7 @@ $cohesity_api = @{
     'last_api_error' = 'OK';
     'session' = $null;
     'userAgent' = "cohesity-api/$versionCohesityAPI";
+    'debug' = $False;
 }
 
 $pwfile = $(Join-Path -Path $PSScriptRoot -ChildPath YWRtaW4)
@@ -90,11 +91,18 @@ public class SSLHandler
 
 function __writeLog($logmessage){
     # get call stack
-    $caller = ''
+    $stackString = ''
     try{
         $callStack = Get-PSCallStack
-        $caller = $callStack.Command -join ', '
-        $lineNumber = $callStack.ScriptLineNumber -join ', '
+        $caller = @($callStack.Command | Select-Object -Skip 1 | Select-Object -SkipLast 1) # -join ', '
+        $lineNumber = @($callStack.ScriptLineNumber | Select-Object -Skip 1 | Select-Object -SkipLast 1) # -join ', '
+        $stack = @()
+        $x = 0
+        foreach($c in $caller){
+            $stack = @($stack + "$c($($lineNumber[$x]))")
+            $x += 1
+        }
+        $stackString = $stack -join ', '
     }catch{
         # nothing
     }
@@ -112,16 +120,17 @@ function __writeLog($logmessage){
         # nothing
     }
 
+    $message = "[cohesity-api($versionCohesityAPI):$($stackString)] $logmessage"
     # avoid race condition
     $apiErrorDate = Get-Date
-    if($Global:lastAPIerror -eq "($caller) line: $lineNumber $logmessage" -and $apiErrorDate -lt $Global:lastAPIerrorDate.AddSeconds(5)){
-        Start-Sleep 5
+    if($Global:lastAPIerror -eq $message -and $apiErrorDate -lt $Global:lastAPIerrorDate.AddSeconds(60)){
+        return $null
     }
-    $Global:lastAPIerror = "($caller) $logmessage"
+    $Global:lastAPIerror = $message
     $Global:lastAPIerrorDate = $apiErrorDate
 
     # output message
-    "$($apiErrorDate): ($caller) line: $lineNumber $logmessage" | Out-File -FilePath "$apilogfile" -Append -Encoding ascii
+    "$($apiErrorDate): $message" | Out-File -FilePath "$apilogfile" -Append -Encoding ascii
 }
 
 function reportError($errorObject, [switch]$quiet){
@@ -209,7 +218,7 @@ function apiauth([string] $vip='helios.cohesity.com',
         $setpasswd = $passwd
     }
     # update password
-    if($updatePassword -or $clearPassword){
+    if($updatePassword){
         $passwd = Set-CohesityAPIPassword -vip $vip -username $username -domain $domain -passwd $passwd -quiet -useApiKey $useApiKey -helios $helios
     }
     # get stored password
@@ -237,6 +246,7 @@ function apiauth([string] $vip='helios.cohesity.com',
 
     if($regionid){
         $cohesity_api.header['regionid'] = $regionid
+        $cohesity_api.header['RegionId'] = $regionid
     }
     # Entra ID (OIDC) authentication
     if($EntraId -and ($vip -in $heliosEndpoints)){
@@ -513,7 +523,25 @@ function apiauth([string] $vip='helios.cohesity.com',
         }catch{
             $thisError = $_
             if($skipForcePasswordChange -or $thisError -match 'User does not have the privilege to access UI' -or $thisError -match "KInvalidError"){
-                $url = $cohesity_api.apiRoot + '/public/accessTokens'
+                # $url = $cohesity_api.apiRoot + '/public/accessTokens'
+                $url = $cohesity_api.apiRootv2 + 'users/sessions'
+                $origbody = $body
+                $body = ConvertTo-Json @{
+                    'domain' = $domain;
+                    'username' = $username;
+                    'password' = $passwd;
+                    'otpType' = $mfaType.ToLower();
+                    'otpCode' = $mfaCode
+                }
+                if($skipForcePasswordChange){
+                    $body = ConvertTo-Json @{
+                        'domain' = $domain;
+                        'username' = $username;
+                        'password' = $passwd;
+                        'otpType' = $mfaType.ToLower();
+                        'otpCode' = $mfaCode;
+                    }
+                }
                 $retryCounter = 0
                 while($retryCounter -le 10){
                     $retryCounter += 1
@@ -525,7 +553,8 @@ function apiauth([string] $vip='helios.cohesity.com',
                         }
                         # authenticate
                         $auth = __auth -method Post -url $url -body $body -timeout $timeout
-                        $cohesity_api.header['authorization'] = $auth.tokenType + ' ' + $auth.accessToken
+                        $cohesity_api.header['session-id'] = $auth.sessionId
+                        # $cohesity_api.header['authorization'] = $auth.tokenType + ' ' + $auth.accessToken
                         __connected -quiet:$quiet
                         $retryCounter = 11
                         if($tenant){
@@ -554,26 +583,29 @@ function apiauth([string] $vip='helios.cohesity.com',
                             $cohesity_api.last_api_error = $message
                             if($message -eq 'Access denied'){
                                 try{
-                                    $url = $cohesity_api.apiRootv2 + 'users/sessions'
-                                    $body = ConvertTo-Json @{
-                                        'domain' = $domain;
-                                        'username' = $username;
-                                        'password' = $passwd;
-                                        'otpType' = $mfaType.ToLower();
-                                        'otpCode' = $mfaCode
-                                    }
-                                    if($skipForcePasswordChange){
-                                        $body = ConvertTo-Json @{
-                                            'domain' = $domain;
-                                            'username' = $username;
-                                            'password' = $passwd;
-                                            'otpType' = $mfaType.ToLower();
-                                            'otpCode' = $mfaCode;
-                                        }
-                                    }
+                                    # $url = $cohesity_api.apiRootv2 + 'users/sessions'
+                                    $url = $cohesity_api.apiRoot + '/public/accessTokens'
+                                    $body = $origbody
+                                    # $body = ConvertTo-Json @{
+                                    #     'domain' = $domain;
+                                    #     'username' = $username;
+                                    #     'password' = $passwd;
+                                    #     'otpType' = $mfaType.ToLower();
+                                    #     'otpCode' = $mfaCode
+                                    # }
+                                    # if($skipForcePasswordChange){
+                                    #     $body = ConvertTo-Json @{
+                                    #         'domain' = $domain;
+                                    #         'username' = $username;
+                                    #         'password' = $passwd;
+                                    #         'otpType' = $mfaType.ToLower();
+                                    #         'otpCode' = $mfaCode;
+                                    #     }
+                                    # }
                                     # authenticate
                                     $auth = __auth -method Post -url $url -body $body -timeout $timeout
-                                    $cohesity_api.header['session-id'] = $auth.sessionId
+                                    # $cohesity_api.header['session-id'] = $auth.sessionId
+                                    $cohesity_api.header['authorization'] = $auth.tokenType + ' ' + $auth.accessToken
                                     __connected -quiet:$quiet
                                     $retryCounter = 11
                                     if($tenant){
@@ -582,6 +614,8 @@ function apiauth([string] $vip='helios.cohesity.com',
                                     # 2023-04-05
                                     return $null
                                 }catch{
+                                    $cohesity_api.last_api_error = $_.ToString()
+                                    $thisError = $_
                                     if($thisError -match 'Too Many Requests'){
                                         reportError $thisError
                                         Write-Host "Sleeping for 20 seconds..."
@@ -793,7 +827,7 @@ function apidrop([switch] $quiet){
     $cohesity_api.clusterReadOnly = $false
     $cohesity_api.heliosConnectedClusters = $null
     $cohesity_api.session = $null
-    if(!$quiet){ Write-Host "Disonnected!" -foregroundcolor green }
+    if(!$quiet){ Write-Host "Disconnected!" -foregroundcolor green }
     $Global:AUTHORIZED = $cohesity_api.authorized
     $Global:AUTHORIZED | Out-Null
     $Global:USING_HELIOS = $false
@@ -803,12 +837,17 @@ function apidrop([switch] $quiet){
 function impersonate($tenant){
     if($cohesity_api.authorized){ 
         if($Global:USING_HELIOS -eq $True){
-            $thisTenant = (api get -mcmv2 users/tenant-access).tenantAccesses | Where-Object {$_.tenantName -eq $tenant}
+            $thisTenant = (api get -mcmv2 tenants).tenants | Where-Object name -eq $tenant
+            # $thisTenant = (api get -mcmv2 users/tenant-access).tenantAccesses | Where-Object {$_.tenantName -eq $tenant}
         }else{
             $thisTenant = api get tenants | Where-Object {$_.name -eq $tenant}
         }
         if($thisTenant){
-            $cohesity_api.header['x-impersonate-tenant-id'] = $thisTenant.tenantId
+            if($Global:USING_HELIOS -eq $True){
+                $cohesity_api.header['x-impersonate-tenant-id'] = $thisTenant.id
+            }else{
+                $cohesity_api.header['x-impersonate-tenant-id'] = $thisTenant.tenantId
+            }
             $cohesity_api.last_api_error = 'OK'
         }else{
             Write-Host "Tenant $tenant not found" -ForegroundColor Yellow
@@ -820,6 +859,7 @@ function impersonate($tenant){
 
 function switchback(){
     $cohesity_api.header.Remove('x-impersonate-tenant-id')
+    $null = $cohesity_api.session.Headers.Remove('x-impersonate-tenant-id')
 }
 
 function getContext(){
@@ -889,6 +929,7 @@ function api($method,
     $header = $cohesity_api.header.Clone()
     if($region){
         $header['regionid'] = $region
+        $header['RegionId'] = $region
     }
 
     if(-not $cohesity_api.authorized){
@@ -926,12 +967,22 @@ function api($method,
         $retryCounter = 0
         while($retryCounter -le 10){
             try {
+                $body = $null
                 if($data){
                     $body = ConvertTo-Json -Compress -Depth 99 $data
                 }
-                $result = __apicall -method $method -url $url -body $body -timeout $timeout 
+                $result = __apicall -method $method -url $url -body $body -timeout $timeout -header $header
                 $cohesity_api.last_api_error = 'OK'
                 $retryCounter = 11
+                if($cohesity_api.debug -eq $True){
+                    "==================================================" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "$(Get-Date)" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "Method: $($method.ToUpper())" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "Url: $url" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "Payload: $($data | toJson)" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "Response:" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                    "$($result | toJson)" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+                }
                 return $result
             }catch{
                 $errorObject = $_
@@ -950,6 +1001,23 @@ function api($method,
             $retryCounter += 1
         }
     }
+}
+
+# Debugger ======================================================================================
+
+function enableCohesityAPIDebugger(){
+    "Debugger enabled: $(Get-Date)" | Out-File -FilePath 'cohesity-har-file.txt'
+    $cohesity_api.debug = $True
+}
+
+function pauseCohesityAPIDebugger(){
+    "Debugger paused: $(Get-Date)" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+    $cohesity_api.debug = $False
+}
+
+function resumeCohesityAPIDebugger(){
+    "Debugger resumed: $(Get-Date)" | Out-File -FilePath 'cohesity-har-file.txt' -Append
+    $cohesity_api.debug = $True
 }
 
 # Get-Runs function =============================================================================
@@ -1113,7 +1181,7 @@ function dateToUsecs($datestring=(Get-Date)){
     $usecs
 }
 
-function dateToString($dt, $format='yyyy-MM-dd hh:mm'){
+function dateToString($dt, $format='yyyy-MM-dd HH:mm'){
     return ($dt.ToString($format) -replace [char]8239, ' ')
 }
 
@@ -1278,7 +1346,7 @@ function Clear-CohesityAPIPassword($vip='helios.cohesity.com', $username='helios
             }
         }
         if($updatedContent -eq ''){
-            Remove-Item -FilePath $pwfile -ErrorAction SilentlyContinue
+            Remove-Item -Path $pwfile -ErrorAction SilentlyContinue
         }else{
             $updatedContent | out-file -FilePath $pwfile
         }
@@ -1381,7 +1449,7 @@ function Set-CohesityAPIPassword($vip='helios.cohesity.com', $username='helios',
     return $passwd
 }
 
-function storePasswordInFile($vip='helios.cohesity.com', $username='helios', $domain='local', $passwd=$null, [switch]$useApiKey){
+function storePasswordInFile($vip='helios.cohesity.com', $username='helios', $domain='local', $passwd=$null, [switch]$useApiKey, [switch]$helios){
     $cohesity_api.pwscope = 'file'
     $null = Set-CohesityAPIPassword -vip $vip -username $username -domain $domain -passwd $passwd -useApiKey $useApiKey -helios $helios
     $cohesity_api.pwscope = 'user'
@@ -1413,7 +1481,7 @@ function storePasswordForUser($vip='helios.cohesity.com', $username='helios', $d
     }
 }
 
-function importStoredPassword($vip='helios.cohesity.com', $username='helios', $domain='local', $key, $useApiKey=$false){
+function importStoredPassword($vip='helios.cohesity.com', $username='helios', $domain='local', $key, $useApiKey=$false, $helios=$False){
     $userFile = $(Join-Path -Path $PSScriptRoot -ChildPath "pw-$vip-$username-$domain.txt")
     if(Test-Path -Path $userFile){
         $keyBytes = [byte[]]($key -split(''))
@@ -1436,7 +1504,8 @@ function ProcessOidcToken ([string]$username, [string]$password, [string]$client
     $tokenreturn=$null
     $tokenreturn=Invoke-RestConOIDCAzure -username ($username) -pwdx ($password) -cidx ($client_id) -tidx ($tenant_id) -scope ($scope)    
     If($tokenreturn.Exception) {
-        return Write-Host "Error Connection: $tokenreturn" -ForegroundColor red
+        Write-Host "Error Connection: $tokenreturn" -ForegroundColor red
+        return $null
     }else{
         return $tokenreturn
     }
@@ -1700,11 +1769,12 @@ function toJson(){
 # self updater
 function cohesityAPIversion([switch]$update){
     if($update){
+        $myfile = Join-Path -Path $PSScriptRoot -ChildPath cohesity-api.ps1
         $repoURL = 'https://raw.githubusercontent.com/cohesity/community-automation-samples/main/powershell'
         if($PSVersionTable.PSEdition -eq 'Core'){
-            (Invoke-WebRequest -UseBasicParsing -Uri "$repoURL/cohesity-api/cohesity-api.ps1" -SkipCertificateCheck).content | Out-File -Force cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
+            (Invoke-WebRequest -UseBasicParsing -Uri "$repoURL/cohesity-api/cohesity-api.ps1" -SkipCertificateCheck).content | Out-File -Force $myfile; (Get-Content $myfile) | Set-Content $myfile
         }else{
-            (Invoke-WebRequest -UseBasicParsing -Uri "$repoURL/cohesity-api/cohesity-api.ps1").content | Out-File -Force cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
+            (Invoke-WebRequest -UseBasicParsing -Uri "$repoURL/cohesity-api/cohesity-api.ps1").content | Out-File -Force $myfile; (Get-Content $myfile) | Set-Content $myfile
         }
         Write-Host "Cohesity-API version updated! Please restart PowerShell"
     }else{
@@ -1716,13 +1786,13 @@ function cohesityAPIversion([switch]$update){
 function getViews([switch]$includeInactive){
     $myViews = @()
     $views = $null
-    while(! $views){
+    # while(! $views){
         if($includeInactive){
             $views = api get views?includeInactive=true
         }else{
             $views = api get views
         }
-    }
+    # }
     $myViews += $views.views
     $lastResult = $views.lastResult
     while(! $lastResult){
@@ -1741,8 +1811,8 @@ function getViews([switch]$includeInactive){
     return $myViews
 }
 
-reportError "Using cohesity-api version $versionCohesityAPI" -quiet
-reportError "OK" -quiet
+# reportError "Using cohesity-api version $versionCohesityAPI" -quiet
+# reportError "OK" -quiet
 
 # . . . . . . . . . . . . . . . . . . .
 #  Previous Updates
@@ -1813,6 +1883,15 @@ reportError "OK" -quiet
 # 2024.01.14 - reenabled legacy access modes
 # 2024.01.25 - added support for unicode characters for REST payloads in Windows PowerShell 5.1
 # 2024.01.30 - fix - clear header before auth
+# 2024-02-18 - fix - toJson function - handle null input
+# 2024-02-28 - added support for helios.gov
+# 2024-02-29 - added dateToString function
+# 2024-05-02 - added quiet switch to fileDownload function
+# 2024-05-17 - added support for EntraID (Open ID) authentication
+# 2024-06-24 - fixed authentication error for SaaS connectors
+# 2024-09-20 - allow posts to read-only helios cluster (for advanced queries)
+# 2024-10-14 - fixed date formatting
+# 2024-12-31 - added 'heliosCluster -' to remove access cluster ID
 #
 # . . . . . . . . . . . . . . . . . . .
 
