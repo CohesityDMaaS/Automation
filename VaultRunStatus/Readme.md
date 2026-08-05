@@ -10,17 +10,20 @@ This script depends on the Cohesity PowerShell API function library, `cohesity-a
 
 ```powershell
 # Download Commands
+$scriptUrl = 'https://raw.githubusercontent.com/CohesityDMaaS/Automation/main/VaultRunStatus/vaultrunstatus.ps1'
+(Invoke-WebRequest -UseBasicParsing -Uri $scriptUrl).content | Out-File -Force vaultrunstatus.ps1; (Get-Content vaultrunstatus.ps1) | Set-Content vaultrunstatus.ps1
+
 $repoUrl = 'https://raw.githubusercontent.com/cohesity/community-automation-samples/main/powershell'
 (Invoke-WebRequest -UseBasicParsing -Uri "$repoUrl/cohesity-api/cohesity-api.ps1").content | Out-File -Force cohesity-api.ps1; (Get-Content cohesity-api.ps1) | Set-Content cohesity-api.ps1
 # End Download Commands
 ```
 
-Then place `vaultRunStatus.ps1` in the same folder as `cohesity-api.ps1`.
+`vaultrunstatus.ps1` is hosted at [CohesityDMaaS/Automation](https://github.com/CohesityDMaaS/Automation/blob/main/VaultRunStatus/vaultrunstatus.ps1); `cohesity-api.ps1` must be placed in the same folder for authentication and API calls.
 
 ## Components
 
-* **vaultRunStatus.ps1**: the main reporting script
-* **cohesity-api.ps1**: the function library `vaultRunStatus.ps1` sources for authentication and API calls (see above)
+* **vaultrunstatus.ps1**: the main reporting script
+* **cohesity-api.ps1**: the function library `vaultrunstatus.ps1` sources for authentication and API calls (see above)
 
 Optional Excel export requires the `ImportExcel` PowerShell module:
 
@@ -30,7 +33,7 @@ Install-Module -Name ImportExcel
 
 ## Authentication
 
-`vaultRunStatus.ps1` accepts the same authentication parameters as `apiauth` in `cohesity-api.ps1`:
+`vaultrunstatus.ps1` accepts the same authentication parameters as `apiauth` in `cohesity-api.ps1`:
 
 * -vip: (optional) endpoint to connect to (cluster, MCM, or Helios - defaults to helios.cohesity.com)
 * -username: (optional) username to connect with
@@ -86,23 +89,23 @@ If a filter (`-ExternalTarget` or `-ArchiveRunStatus`) matches nothing for a clu
 Report on every FortKnox vaulting run, across all Helios-connected clusters, from the last 24 hours:
 
 ```powershell
-.\vaultRunStatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -ExternalTarget FortKnox
+.\vaultrunstatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -ExternalTarget FortKnox
 ```
 
 Report on a single cluster, going back one week, including every external target:
 
 ```powershell
-.\vaultRunStatus.ps1 -vip mycluster -username myuser -domain mydomain.net -clusterName mycluster -duration 1w
+.\vaultrunstatus.ps1 -vip mycluster -username myuser -domain mydomain.net -clusterName mycluster -duration 1w
 ```
 
 Report only failed or canceled archive runs over the last month:
 
 ```powershell
-.\vaultRunStatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -duration 1m -ArchiveRunStatus Failed,Canceled
+.\vaultrunstatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -duration 1m -ArchiveRunStatus Failed,Canceled
 ```
 
 Report using GiB units for data transferred:
 
 ```powershell
-.\vaultRunStatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -unit GiB
+.\vaultrunstatus.ps1 -vip helios.cohesity.com -username myuser -domain mydomain.net -unit GiB
 ```
