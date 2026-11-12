@@ -11,6 +11,7 @@ It prompts for:
   - Number of clusters in the cascade (default 3)
   - Cluster ID (and optional name) for ClusterA, ClusterB, ClusterC ...
   - Retention (days) and DataLock (days, 0 = none) at each hop
+  - Optional LOG backups: frequency (default 15 min) and log retention / DataLock at each hop (default 7d / 7d)
   - Cluster to run against (default 127.0.0.1), username, password (hidden)
 
 It writes <PolicyName>.json, then applies it using the original session-based
@@ -159,6 +160,7 @@ class SessionManager:
         self.base_url = f"https://{cluster_target}"
         self.auth_method_used = None
         self.transient_failure = False   # True when the last login failed for a retryable reason
+        self.auth_failed = False         # True when connect() gave up because credentials were rejected
         
         logger.info(f"Initialized SessionManager for cluster: {cluster_target}")
         logger.debug(f"Base URL: {self.base_url}")
@@ -826,13 +828,16 @@ class CohesityClusterManager:
             logger.info("✓ Cluster is reachable")
             logger.debug(f"API availability - v1: {connectivity_info['v1_api_available']}, v2: {connectivity_info['v2_api_available']}")
         
-        # Create session (retry only transient failures; never retry a bad password -> lockout risk)
+        # Create session (retry only transient failures; a bad password is NOT retried here -
+        # main() re-prompts for credentials, limited to MAX_LOGIN_TRIES, to avoid account lockout)
+        self.session_manager.auth_failed = False
         attempts = TIMEOUTS["retries"] + 1
         for attempt in range(1, attempts + 1):
             if self.session_manager.create_session():
                 break
             if not self.session_manager.transient_failure or attempt == attempts:
                 logger.error("✗ Failed to create session")
+                self.session_manager.auth_failed = not self.session_manager.transient_failure
                 return False
             logger.warning(f"Login attempt {attempt}/{attempts} failed (cluster slow/unreachable)")
             backoff_sleep(attempt)
@@ -1122,10 +1127,14 @@ def load_policy_from_file(file_path):
 # =========================================================================== #
 #  NEW: interactive inputs + policy builder
 # =========================================================================== #
-SCRIPT_VERSION = "2026-11-10-timeouts-noflags"   # v2 + patient timeouts/retries (no flag step)
+SCRIPT_VERSION = "2026-11-12-logbackup-prompts"   # v3 + optional log backups (schedule + per-hop log retention)
 DEFAULT_CLUSTERS = 3
+MAX_LOGIN_TRIES = 3     # username/password attempts before giving up
 DEFAULT_RETENTION = 30
 DEFAULT_DATALOCK = 30
+DEFAULT_LOG_FREQ_MIN = 15     # minutes between log backups
+DEFAULT_LOG_RETENTION = 7     # days, per hop
+DEFAULT_LOG_DATALOCK = 7      # days, per hop (0 = none)
 POLICY_ID_RE = re.compile(r"^\d+:\d+:\d+$")
 
 
@@ -1219,6 +1228,27 @@ def gather_inputs(args):
         hops.append({"retention": ret, "datalock": lock})
 
     cfg["clusters"], cfg["hops"] = clusters, hops
+
+    # ---- log backups (databases / SQL / Oracle etc.) ----------------------- #
+    print("\n--- Log backups ---")
+    log_on = ask("Include LOG backups in this policy? (yes/no)", "no").lower() in ("y", "yes")
+    cfg["log"] = log_on
+    cfg["log_freq_min"] = None
+    cfg["log_hops"] = []
+    if log_on:
+        cfg["log_freq_min"] = int(ask("Log backup frequency in MINUTES (e.g. 15, 60, 120)",
+                                      DEFAULT_LOG_FREQ_MIN, v_int_min(1)))
+        print("\n--- Log retention and log DataLock at each hop (days) ---")
+        for i, c in enumerate(clusters):
+            lret = int(ask(f"Cluster{c['label']} LOG retention (days)", DEFAULT_LOG_RETENTION, v_int_min(1)))
+            llock = int(ask(f"Cluster{c['label']} LOG DataLock days (0 = no DataLock)",
+                            DEFAULT_LOG_DATALOCK, v_int_min(0)))
+            if llock > lret:
+                sys.exit(f"ERROR: Cluster{c['label']}: log DataLock ({llock}d) cannot exceed log retention ({lret}d).")
+            if lret > hops[i]["retention"]:
+                print(f"  WARNING: Cluster{c['label']} log retention ({lret}d) is longer than its "
+                      f"backup retention ({hops[i]['retention']}d).")
+            cfg["log_hops"].append({"retention": lret, "datalock": llock})
     return cfg
 
 
@@ -1232,6 +1262,13 @@ def retention_block(days, lock_days, worm_on_external):
 
 def daily_schedule():
     return {"unit": "Days", "daySchedule": {"frequency": 1}}
+
+
+def log_schedule(minutes):
+    """Log backup schedule: whole hours -> Hours/hourSchedule, otherwise Minutes/minuteSchedule."""
+    if minutes >= 60 and minutes % 60 == 0:
+        return {"unit": "Hours", "hourSchedule": {"frequency": minutes // 60}}
+    return {"unit": "Minutes", "minuteSchedule": {"frequency": minutes}}
 
 
 def build_policy(cfg):
@@ -1248,6 +1285,9 @@ def build_policy(cfg):
         target = {"targetType": "RemoteCluster", "copyOnRunSuccess": False,
                   "retention": retention_block(h["retention"], h["datalock"], True),
                   "schedule": daily_schedule()}
+        if cfg.get("log"):                      # log backups replicated/vaulted with their own retention
+            lh = cfg["log_hops"][i + 1]
+            target["logRetention"] = retention_block(lh["retention"], lh["datalock"], True)
         if i + 1 == n - 1:                      # last hop -> vault
             target["clusterId"], target["clusterName"] = int(dst["id"]), dst["name"]
             remote = {"onpremVaultTargets": [target]}
@@ -1268,6 +1308,15 @@ def build_policy(cfg):
         "isCBSEnabled": False,
         "retryOptions": {"retries": 3, "retryIntervalMins": 5},
     }
+    if cfg.get("log"):
+        lh0 = cfg["log_hops"][0]
+        policy["backupPolicy"]["log"] = {
+            "schedule": log_schedule(cfg["log_freq_min"]),
+            "retention": retention_block(lh0["retention"], lh0["datalock"], False),
+        }
+        policy["description"] += (f" Log backups every {cfg['log_freq_min']} min, log retention/DataLock per hop: " +
+            ", ".join(f"{c['name']} {h['retention']}d/" + (f"{h['datalock']}d" if h["datalock"] else "none")
+                      for c, h in zip(cl, cfg["log_hops"])) + ".")
     if cfg["policy_id"]:
         policy = {"id": cfg["policy_id"], **policy}
     return [policy]
@@ -1338,6 +1387,13 @@ def main():
     for c, h in zip(cfg["clusters"], cfg["hops"]):
         lock = f"{h['datalock']}d DataLock" if h["datalock"] else "no DataLock"
         print(f"  Cluster{c['label']}  {c['name']:<20} ID {c['id']:<20} retention {h['retention']}d, {lock}")
+    if cfg.get("log"):
+        print(f"  Log backups: every {cfg['log_freq_min']} min")
+        for c, h in zip(cfg["clusters"], cfg["log_hops"]):
+            lock = f"{h['datalock']}d DataLock" if h["datalock"] else "no DataLock"
+            print(f"  Cluster{c['label']}  {c['name']:<20} log retention {h['retention']}d, {lock}")
+    else:
+        print("  Log backups: not included")
     if args.dry_run:
         print("\nDry run: cluster not contacted.")
         return 0
@@ -1359,7 +1415,24 @@ def main():
     cluster_manager = CohesityClusterManager(args.cluster, args.username, password)
     try:
         print("\n📡 STEP 1: Establishing Session-Based Connection")
-        if not cluster_manager.connect():
+        connected = False
+        for attempt in range(1, MAX_LOGIN_TRIES + 1):
+            if cluster_manager.connect():
+                connected = True
+                break
+            if not cluster_manager.session_manager.auth_failed:
+                break                       # network / cluster problem, not credentials
+            left = MAX_LOGIN_TRIES - attempt
+            if left == 0 or args.yes:
+                break
+            print(f"\n❌ Login failed (attempt {attempt} of {MAX_LOGIN_TRIES}). {left} attempt(s) left.")
+            print("   ⚠️  Repeated failed logins can lock the account - double-check the credentials.")
+            new_user = input(f"Username [{args.username}]: ").strip() or args.username
+            new_pw = getpass.getpass("Password: ")
+            args.username = new_user
+            cluster_manager.session_manager.username = new_user
+            cluster_manager.session_manager.password = new_pw
+        if not connected:
             print("❌ FAILED: Cannot establish session with cluster")
             return 1
 
