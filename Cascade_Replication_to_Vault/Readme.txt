@@ -136,8 +136,17 @@ SCRIPT 2: cohesity_cascade_policy.py   (SOURCE CLUSTER ONLY)
     - Cluster ID and Cluster Name for ClusterA, ClusterB, ClusterC...
     - Retention (days) and DataLock (days, 0 = none) at each hop
       (defaults 30 / 30; DataLock cannot exceed retention)
+    - Whether to include LOG backups (default no). If yes: log backup
+      frequency in minutes (default 15) and log retention / log DataLock
+      in days for each cluster (defaults 7 / 7; log DataLock cannot
+      exceed log retention)
     - Cluster to run against (default 127.0.0.1), username, password
     - Final confirmation before applying
+
+  Login: if the username or password is rejected, the script asks for
+  them again - 3 attempts in total, then it stops (to avoid locking the
+  account). With --yes there is no re-prompt. Network/timeouts are
+  retried separately (see the timeout switches).
 
   It writes <PolicyName>.json, then applies it: PUT if a policy ID is
   given (update), POST if not (create). The last cluster in the chain
@@ -160,6 +169,10 @@ SCRIPT 2: cohesity_cascade_policy.py   (SOURCE CLUSTER ONLY)
                           cluster/hop, in order.
     --datalock DAYS       DataLock in days (0 = none). Repeat once per
                           cluster/hop, in order.
+
+  Note: log backup settings are prompts only (no switches). They are
+  asked after the retention / DataLock prompts, so the script must be
+  run interactively.
 
   Connection switches:
     --cluster HOST        Cluster FQDN/IP to run against
